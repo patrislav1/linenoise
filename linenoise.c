@@ -702,21 +702,21 @@ void linenoiseEditDeletePrevWord(struct linenoiseState *l) {
  * when ctrl+d is typed.
  *
  * The function returns the length of the current buffer. */
-int linenoiseEdit(int stdin_fd, int stdout_fd, char *buf, size_t buflen, const char *prompt)
+int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
 {
     struct linenoiseState l;
 
     /* Populate the linenoise state that we pass to functions implementing
      * specific editing functionalities. */
-    l.ifd = stdin_fd;
-    l.ofd = stdout_fd;
+    l.ifd = STDIN_FILENO;
+    l.ofd = STDOUT_FILENO;
     l.buf = buf;
     l.buflen = buflen;
     l.prompt = prompt;
     l.plen = strlen(prompt);
     l.oldpos = l.pos = 0;
     l.len = 0;
-    l.cols = getColumns(stdin_fd, stdout_fd);
+    l.cols = getColumns(l.ifd, l.ofd);
     l.maxrows = 0;
     l.history_index = 0;
 
