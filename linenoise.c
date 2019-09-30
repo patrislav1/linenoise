@@ -116,6 +116,9 @@
 //#include <sys/ioctl.h>
 #include <unistd.h>
 #include "linenoise.h"
+#include "periph/mux_uart.h"
+
+extern mux_uart_index_t stdio_uart;
 
 #define LINENOISE_DEFAULT_HISTORY_MAX_LEN 100
 #define LINENOISE_MAX_LINE 4096
@@ -704,38 +707,50 @@ void linenoiseEditDeletePrevWord(struct linenoiseState *l) {
  * The function returns the length of the current buffer. */
 int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
 {
-    struct linenoiseState l;
+    static enum {
+        ln_init = 0,
+        ln_reading
+    } ln_mode = ln_init;
 
-    /* Populate the linenoise state that we pass to functions implementing
-     * specific editing functionalities. */
-    l.ifd = STDIN_FILENO;
-    l.ofd = STDOUT_FILENO;
-    l.buf = buf;
-    l.buflen = buflen;
-    l.prompt = prompt;
-    l.plen = strlen(prompt);
-    l.oldpos = l.pos = 0;
-    l.len = 0;
-    l.cols = getColumns(l.ifd, l.ofd);
-    l.maxrows = 0;
-    l.history_index = 0;
+    static struct linenoiseState l;
+    char c;
+    char seq[3];
 
-    /* Buffer starts empty. */
-    l.buf[0] = '\0';
-    l.buflen--; /* Make sure there is always space for the nulterm */
+    switch (ln_mode) {
+    case ln_init:
+    default:
+        /* Populate the linenoise state that we pass to functions implementing
+        * specific editing functionalities. */
+        l.ifd = STDIN_FILENO;
+        l.ofd = STDOUT_FILENO;
+        l.buf = buf;
+        l.buflen = buflen;
+        l.prompt = prompt;
+        l.plen = strlen(prompt);
+        l.oldpos = l.pos = 0;
+        l.len = 0;
+        l.cols = getColumns(l.ifd, l.ofd);
+        l.maxrows = 0;
+        l.history_index = 0;
 
-    /* The latest history entry is always our current buffer, that
-     * initially is just an empty string. */
-    linenoiseHistoryAdd("");
+        /* Buffer starts empty. */
+        l.buf[0] = '\0';
+        l.buflen--; /* Make sure there is always space for the nulterm */
 
-    if (write(l.ofd,prompt,l.plen) == -1) return -1;
-    while(1) {
-        char c;
-        int nread;
-        char seq[3];
+        /* The latest history entry is always our current buffer, that
+        * initially is just an empty string. */
+        linenoiseHistoryAdd("");
 
-        nread = read(l.ifd,&c,1);
-        if (nread <= 0) return l.len;
+        if (write(l.ofd,prompt,l.plen) == -1) return -1;
+
+        ln_mode = ln_reading;
+
+        // fall through
+    case ln_reading:
+        if (!uart_has_input(stdio_uart)) {
+            return -1;
+        }
+        c = uart_getch(stdio_uart);
 
         /* Only autocomplete when the callback is set. It returns < 0 when
          * there was an error reading from fd. Otherwise it will return the
@@ -744,7 +759,7 @@ int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
             c = completeLine(&l);
 
             /* Read next character when 0 */
-            if (c == 0) continue;
+            if (c == 0) return -1;
         }
 
         switch(c) {
@@ -760,6 +775,7 @@ int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
                 refreshLine(&l);
                 hintsCallback = hc;
             }
+            ln_mode = ln_init;
             return (int)l.len;
         case CTRL_C:     /* ctrl-c */
             errno = EAGAIN;
@@ -881,8 +897,9 @@ int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
             linenoiseEditDeletePrevWord(&l);
             break;
         }
+    break;
     }
-    return l.len;
+    return -1;
 }
 
 /* This special mode is used by linenoise in order to print scan codes
