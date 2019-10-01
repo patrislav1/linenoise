@@ -1062,6 +1062,24 @@ int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
     return -1;
 }
 
+void linenoiseRefreshEditor()
+{
+    switch (l_state.mode) {
+    case ln_init:
+    case ln_getColumns:
+    case ln_getColumns_1:
+    case ln_getColumns_2:
+        // Don't refresh if line editor not active (yet).
+        break;
+    case ln_completion:
+        lnShowCompletion(&l_state);
+        break;
+    default:
+        refreshLine(&l_state);
+        break;
+    }
+}
+
 /* This special mode is used by linenoise in order to print scan codes
  * on screen for debugging / development purposes. It is implemented
  * by the linenoise_example program using the --keycodes option. */
