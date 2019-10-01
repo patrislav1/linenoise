@@ -176,6 +176,10 @@ struct linenoiseState {
     ssize_t history_index;  /* The history index we are currently editing. */
 };
 
+static struct linenoiseState l_state = {
+    .mode = ln_getColumns
+};
+
 enum KEY_ACTION {
     KEY_NULL = 0,	    /* NULL */
     CTRL_A = 1,         /* Ctrl+a */
@@ -324,7 +328,7 @@ static int getColumns(struct linenoiseState *ls)
         break;
     }
 finished:
-    ls->mode = ln_read_regular;
+    ls->mode = ln_init;
     return 0;
 
 failed:
@@ -808,7 +812,7 @@ static void lnInitState(struct linenoiseState *l, char *buf, size_t buflen, cons
 
     console_write_string(prompt);
 
-    l->mode = ln_getColumns;
+    l->mode = ln_read_regular;
 }
 
 static int lnReadEscSequence(struct linenoiseState *l)
@@ -911,7 +915,7 @@ static int lnHandleCharacter(struct linenoiseState *l, char c)
             refreshLine(l);
             hintsCallback = hc;
         }
-        l->mode = ln_init;
+        l->mode = ln_getColumns;
         return (int)l->len;
     case CTRL_C:     /* ctrl-c */
         errno = EAGAIN;
@@ -1036,28 +1040,24 @@ static int lnReadUserInput(struct linenoiseState *l)
  * The function returns the length of the current buffer. */
 int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
 {
-    static struct linenoiseState l = {
-        .mode = ln_init
-    };
-
-    switch (l.mode) {
-    case ln_init:
+    switch (l_state.mode) {
     default:
-        lnInitState(&l, buf, buflen, prompt);
-    // fall through
     case ln_getColumns:
     case ln_getColumns_1:
     case ln_getColumns_2:
-        if (getColumns(&l) < 0) {
+        if (getColumns(&l_state) < 0) {
             return -1;
         }
     // fall through
+    case ln_init:
+        lnInitState(&l_state, buf, buflen, prompt);
+    // fall through
     case ln_read_regular:
-        return lnReadUserInput(&l);
+        return lnReadUserInput(&l_state);
     case ln_read_esc:
-        return lnReadEscSequence(&l);
+        return lnReadEscSequence(&l_state);
     case ln_completion:
-        return lnCompletion(&l);
+        return lnCompletion(&l_state);
     }
     return -1;
 }
