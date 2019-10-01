@@ -145,7 +145,6 @@ struct linenoiseState {
         ln_reading
     } mode;
     int ifd;            /* Terminal stdin file descriptor. */
-    int ofd;            /* Terminal stdout file descriptor. */
     char *buf;          /* Edited line buffer. */
     size_t buflen;      /* Edited line buffer size. */
     const char *prompt; /* Prompt to display. */
@@ -203,6 +202,26 @@ FILE *lndebug_fp = NULL;
 
 /* ======================= Low level terminal handling ====================== */
 
+#if 0
+static int console_getch()
+{
+    if (!uart_has_input(stdio_uart)) {
+        return -1;
+    }
+    return uart_getch(stdio_uart);
+}
+#endif
+
+static inline void console_write(const char *buf, size_t n)
+{
+    uart_write_bytes(stdio_uart, buf, n);
+}
+
+static inline void console_write_string(const char *str)
+{
+    uart_write_string(stdio_uart, str);
+}
+
 /* Set if to use or not the multi line mode. */
 void linenoiseSetMultiLine(bool ml)
 {
@@ -212,14 +231,14 @@ void linenoiseSetMultiLine(bool ml)
 /* Use the ESC [6n escape sequence to query the horizontal cursor position
  * and return it. On error -1 is returned, on success the position of the
  * cursor. */
-static ssize_t getCursorPosition(int ifd, int ofd)
+static ssize_t getCursorPosition(int ifd)
 {
     char buf[32];
     size_t cols, rows;
     size_t i = 0;
 
     /* Report cursor location */
-    if (write(ofd, "\x1b[6n", 4) != 4) return -1;
+    console_write_string("\x1b[6n");
 
     /* Read the response: ESC [ rows ; cols R */
     while (i < sizeof(buf) - 1) {
@@ -232,32 +251,29 @@ static ssize_t getCursorPosition(int ifd, int ofd)
     /* Parse it. */
     if (buf[0] != ESC || buf[1] != '[') return -1;
     if (sscanf(buf + 2, "%zu;%zu", &rows, &cols) != 2) return -1;
-
     return (ssize_t)cols;
 }
 
 /* Try to get the number of columns in the current terminal, or assume 80
  * if it fails. */
-static size_t getColumns(int ifd, int ofd)
+static size_t getColumns(int ifd)
 {
     ssize_t start, cols;
 
     /* Get the initial position so we can restore it later. */
-    start = getCursorPosition(ifd, ofd);
+    start = getCursorPosition(ifd);
     if (start == -1) goto failed;
 
     /* Go to right margin and get position. */
-    if (write(ofd, "\x1b[999C", 6) != 6) goto failed;
-    cols = getCursorPosition(ifd, ofd);
+    console_write_string("\x1b[999C");
+    cols = getCursorPosition(ifd);
     if (cols == -1) goto failed;
 
     /* Restore position. */
     if (cols > start) {
         char seq[16];
         snprintf(seq, sizeof(seq), "\x1b[%zuD", cols - start);
-        if (write(ofd, seq, strlen(seq)) == -1) {
-            /* Can't recover... */
-        }
+        console_write_string(seq);
     }
 
     return (size_t)cols;
@@ -269,9 +285,7 @@ failed:
 /* Clear the screen. Used to handle ctrl+l */
 void linenoiseClearScreen(void)
 {
-    if (write(STDOUT_FILENO, "\x1b[H\x1b[2J", 7) <= 0) {
-        /* nothing to do, just to avoid warning. */
-    }
+    console_write_string("\x1b[H\x1b[2J");
 }
 
 /* Beep, used for completion when there is nothing to complete or when all
@@ -478,7 +492,7 @@ static void refreshSingleLine(struct linenoiseState *l)
 {
     char seq[64];
     size_t plen = strlen(l->prompt);
-    int fd = l->ofd;
+
     char *buf = l->buf;
     size_t len = l->len;
     size_t pos = l->pos;
@@ -510,7 +524,7 @@ static void refreshSingleLine(struct linenoiseState *l)
     snprintf(seq, sizeof(seq), "\r\x1b[%dC", (int)(pos + plen));
     abAppend(&ab, seq, strlen(seq));
 
-    if (write(fd, ab.b, ab.len) == -1) {} /* Can't recover from write error. */
+    console_write(ab.b, ab.len);
 
     abFree(&ab);
 }
@@ -528,7 +542,6 @@ static void refreshMultiLine(struct linenoiseState *l)
     size_t rpos2; /* rpos after refresh. */
     size_t col; /* colum position, zero-based. */
     size_t old_rows = l->maxrows;
-    int fd = l->ofd;
     size_t j;
     struct abuf ab;
 
@@ -599,7 +612,7 @@ static void refreshMultiLine(struct linenoiseState *l)
     lndebug("\n");
     l->oldpos = l->pos;
 
-    if (write(fd, ab.b, ab.len) == -1) {} /* Can't recover from write error. */
+    console_write(ab.b, ab.len);
     abFree(&ab);
 }
 
@@ -627,7 +640,7 @@ int linenoiseEditInsert(struct linenoiseState *l, char c)
             if ((!mlmode && l->plen + l->len < l->cols && !hintsCallback)) {
                 /* Avoid a full update of the line in the
                  * trivial case. */
-                if (write(l->ofd, &c, 1) == -1) return -1;
+                console_write(&c, 1);
             } else {
                 refreshLine(l);
             }
@@ -754,14 +767,13 @@ void lnInitState(struct linenoiseState *l, char *buf, size_t buflen, const char 
     /* Populate the linenoise state that we pass to functions implementing
     * specific editing functionalities. */
     l->ifd = STDIN_FILENO;
-    l->ofd = STDOUT_FILENO;
     l->buf = buf;
     l->buflen = buflen;
     l->prompt = prompt;
     l->plen = strlen(prompt);
     l->oldpos = l->pos = 0;
     l->len = 0;
-    l->cols = (size_t)getColumns(l->ifd, l->ofd);
+    l->cols = (size_t)getColumns(l->ifd);
     l->maxrows = 0;
     l->history_index = 0;
 
@@ -773,7 +785,7 @@ void lnInitState(struct linenoiseState *l, char *buf, size_t buflen, const char 
     * initially is just an empty string. */
     linenoiseHistoryAdd("");
 
-    write(l->ofd, prompt, l->plen);
+    console_write_string(prompt);
 
     l->mode = ln_reading;
 }
