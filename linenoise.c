@@ -140,6 +140,10 @@ static char **history = NULL;
  * We pass this state to functions implementing specific editing
  * functionalities. */
 struct linenoiseState {
+    enum {
+        ln_init = 0,
+        ln_reading
+    } mode;
     int ifd;            /* Terminal stdin file descriptor. */
     int ofd;            /* Terminal stdout file descriptor. */
     char *buf;          /* Edited line buffer. */
@@ -755,16 +759,13 @@ void linenoiseEditDeletePrevWord(struct linenoiseState *l)
  * The function returns the length of the current buffer. */
 int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
 {
-    static enum {
-        ln_init = 0,
-        ln_reading
-    } ln_mode = ln_init;
-
-    static struct linenoiseState l;
+    static struct linenoiseState l = {
+        .mode = ln_init
+    };
     int c;
     char seq[3];
 
-    switch (ln_mode) {
+    switch (l.mode) {
     case ln_init:
     default:
         /* Populate the linenoise state that we pass to functions implementing
@@ -791,7 +792,7 @@ int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
 
         if (write(l.ofd, prompt, l.plen) == -1) return -1;
 
-        ln_mode = ln_reading;
+        l.mode = ln_reading;
 
     // fall through
     case ln_reading:
@@ -823,7 +824,7 @@ int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
                 refreshLine(&l);
                 hintsCallback = hc;
             }
-            ln_mode = ln_init;
+            l.mode = ln_init;
             return (int)l.len;
         case CTRL_C:     /* ctrl-c */
             errno = EAGAIN;
