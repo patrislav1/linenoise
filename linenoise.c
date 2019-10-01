@@ -120,6 +120,7 @@
 #include <sys/types.h>
 
 #include "periph/mux_uart.h"
+#include "util/timeout.h"
 
 extern mux_uart_index_t stdio_uart;
 
@@ -163,6 +164,9 @@ struct linenoiseState {
     char cur_pos_buf[32];
     ssize_t cur_pos_idx;
     ssize_t cur_pos_initial;
+    timeout_t cur_pos_timeout;
+
+    bool smart_term_connected;
 
     char *buf;          /* Edited line buffer. */
     size_t buflen;      /* Edited line buffer size. */
@@ -262,13 +266,15 @@ static ssize_t getCursorPosition(struct linenoiseState *ls)
         ls->cur_pos_idx = 0;
         /* Query cursor location */
         console_write_string("\x1b[6n");
+        timeout_set(&ls->cur_pos_timeout, 100);
         return -1;
     }
     
     // Read one character
     int c = console_getch();
     if (c < 0) {
-        return -1;
+        // Return error, if timeout elapsed.
+        return timeout_elapsed(&ls->cur_pos_timeout) ? -2 : -1;
     }
 
     // Store until 'R' or buffer full
@@ -303,6 +309,7 @@ static int getColumns(struct linenoiseState *ls)
         } else if (result == -2) {
             goto failed;
         }
+        ls->smart_term_connected = true;
         ls->cur_pos_initial = result;
 
         /* Go to right margin and get position. */
@@ -332,6 +339,7 @@ finished:
     return 0;
 
 failed:
+    ls->smart_term_connected = false;
     ls->cols = result;
     goto finished;
 }
@@ -1078,6 +1086,11 @@ void linenoiseRefreshEditor()
         refreshLine(&l_state);
         break;
     }
+}
+
+bool smartTerminalConnected()
+{
+    return l_state.smart_term_connected;
 }
 
 /* This special mode is used by linenoise in order to print scan codes
