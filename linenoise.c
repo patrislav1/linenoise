@@ -143,10 +143,13 @@ struct linenoiseState {
     enum {
         ln_init = 0,
         ln_read_regular,
-        ln_read_esc
+        ln_read_esc,
+        ln_completion
     } mode;
     char seq[3];        /* Esc sequence buffer. */
     size_t seq_idx;     /* Esc sequence read index. */
+    size_t completion_idx; /* Auto-completion selected entry index. */
+    linenoiseCompletions lc;
 
     char *buf;          /* Edited line buffer. */
     size_t buflen;      /* Edited line buffer size. */
@@ -313,6 +316,25 @@ static void freeCompletions(linenoiseCompletions *lc)
 
     if (lc->cvec != NULL)
         free(lc->cvec);
+    
+    lc->len = 0;
+}
+
+static void lnShowCompletion(struct linenoiseState *ls)
+{
+    /* Show completion or original buffer */
+    if (ls->completion_idx < ls->lc.len) {
+        struct linenoiseState saved = *ls;
+
+        ls->len = ls->pos = strlen(ls->lc.cvec[ls->completion_idx]);
+        ls->buf = ls->lc.cvec[ls->completion_idx];
+        refreshLine(ls);
+        ls->len = saved.len;
+        ls->pos = saved.pos;
+        ls->buf = saved.buf;
+    } else {
+        refreshLine(ls);
+    }
 }
 
 /* This is an helper function for linenoiseEdit() and is called when the
@@ -321,60 +343,19 @@ static void freeCompletions(linenoiseCompletions *lc)
  *
  * The state of the editing is encapsulated into the pointed linenoiseState
  * structure as described in the structure definition. */
-static int completeLine(struct linenoiseState *ls)
+static void completeLine(struct linenoiseState *ls)
 {
-    linenoiseCompletions lc = { 0, NULL };
-    int c = 0;
+    ls->lc = (linenoiseCompletions){ 0, NULL };
+    completionCallback(ls->buf, &ls->lc);
 
-    completionCallback(ls->buf, &lc);
-    if (lc.len == 0) {
+    if (ls->lc.len == 0) {
         linenoiseBeep();
+        freeCompletions(&ls->lc);
     } else {
-        size_t stop = 0, i = 0;
-
-        while(!stop) {
-            /* Show completion or original buffer */
-            if (i < lc.len) {
-                struct linenoiseState saved = *ls;
-
-                ls->len = ls->pos = strlen(lc.cvec[i]);
-                ls->buf = lc.cvec[i];
-                refreshLine(ls);
-                ls->len = saved.len;
-                ls->pos = saved.pos;
-                ls->buf = saved.buf;
-            } else {
-                refreshLine(ls);
-            }
-
-            do {
-                c = console_getch();
-            } while (c < 0);
-
-            switch(c) {
-            case 9: /* tab */
-                i = (i + 1) % (lc.len + 1);
-                if (i == lc.len) linenoiseBeep();
-                break;
-            case 27: /* escape */
-                /* Re-show original buffer */
-                if (i < lc.len) refreshLine(ls);
-                stop = 1;
-                break;
-            default:
-                /* Update buffer and return */
-                if (i < lc.len) {
-                    ls->len = ls->pos = (size_t)snprintf(ls->buf, ls->buflen, "%s", lc.cvec[i]);
-                }
-
-                stop = 1;
-                break;
-            }
-        }
+        ls->completion_idx = 0;
+        ls->mode = ln_completion;
+        lnShowCompletion(ls);
     }
-
-    freeCompletions(&lc);
-    return c; /* Return last read character */
 }
 
 /* Register a callback function to be called for tab-completion. */
@@ -866,23 +847,14 @@ int lnReadEscSequence(struct linenoiseState *l)
     return -1;
 }
 
-int lnReadUserInput(struct linenoiseState *l)
+static int lnHandleCharacter(struct linenoiseState *l, char c)
 {
-    int c;
-
-    if (!uart_has_input(stdio_uart)) {
-        return -1;
-    }
-    c = uart_getch(stdio_uart);
-
     /* Only autocomplete when the callback is set. It returns < 0 when
         * there was an error reading from fd. Otherwise it will return the
         * character that should be handled next. */
-    if (c == 9 && completionCallback != NULL) {
-        c = completeLine(l);
-
-        /* Read next character when 0 */
-        if (c == 0) return -1;
+    if (c == '\t' && completionCallback != NULL) {
+        completeLine(l);
+        return -1;
     }
 
     switch(c) {
@@ -972,6 +944,50 @@ int lnReadUserInput(struct linenoiseState *l)
     return -1;
 }
 
+static int lnCompletion(struct linenoiseState *ls)
+{
+    int c = console_getch();
+    if (c < 0) {
+        return -1;
+    }
+
+    switch(c) {
+    case 9: /* tab */
+        ls->completion_idx = (ls->completion_idx + 1) % (ls->lc.len + 1);
+        if (ls->completion_idx == ls->lc.len) linenoiseBeep();
+        lnShowCompletion(ls);
+        return -1;
+    case 27: /* escape */
+        /* Re-show original buffer */
+        if (ls->completion_idx < ls->lc.len) refreshLine(ls);
+        break;
+    default:
+        /* Update buffer and return */
+        if (ls->completion_idx < ls->lc.len) {
+            size_t len = snprintf(ls->buf, ls->buflen, "%s", ls->lc.cvec[ls->completion_idx]);
+            ls->len = len;
+            ls->pos = len;
+        }
+        break;
+    }
+
+    ls->mode = ln_read_regular;
+    freeCompletions(&ls->lc);
+    return lnHandleCharacter(ls, (char)c);
+}
+
+int lnReadUserInput(struct linenoiseState *l)
+{
+    int c;
+
+    if (!uart_has_input(stdio_uart)) {
+        return -1;
+    }
+    c = uart_getch(stdio_uart);
+
+    return lnHandleCharacter(l, (char)c);
+}
+
 /* This function is the core of the line editing capability of linenoise.
  * It expects 'fd' to be already in "raw mode" so that every key pressed
  * will be returned ASAP to read().
@@ -996,6 +1012,8 @@ int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
         return lnReadUserInput(&l);
     case ln_read_esc:
         return lnReadEscSequence(&l);
+    case ln_completion:
+        return lnCompletion(&l);
     }
     return -1;
 }
