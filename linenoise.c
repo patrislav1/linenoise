@@ -142,8 +142,12 @@ static char **history = NULL;
 struct linenoiseState {
     enum {
         ln_init = 0,
-        ln_reading
+        ln_read_regular,
+        ln_read_esc
     } mode;
+    char seq[3];        /* Esc sequence buffer. */
+    size_t seq_idx;     /* Esc sequence read index. */
+
     char *buf;          /* Edited line buffer. */
     size_t buflen;      /* Edited line buffer size. */
     const char *prompt; /* Prompt to display. */
@@ -782,14 +786,89 @@ void lnInitState(struct linenoiseState *l, char *buf, size_t buflen, const char 
 
     console_write_string(prompt);
 
-    l->mode = ln_reading;
+    l->mode = ln_read_regular;
 }
 
+int lnReadEscSequence(struct linenoiseState *l)
+{
+    /* Read at least two bytes representing the escape sequence */
+    int c = console_getch();
+    if (c < 0) {
+        return -1;
+    }
+    if (l->seq_idx >= sizeof(l->seq)) {
+        // This should never happen ...
+        return -1;
+    }
+    l->seq[l->seq_idx++] = c;
+    if (l->seq_idx < 2) {
+        // We need at least 2 characters
+        return -1;
+    }
+
+    /* ESC [ sequences. */
+    if (l->seq[0] == '[') {
+        if (l->seq[1] >= '0' && l->seq[1] <= '9') {
+            /* Extended escape, make sure we have read the additional byte. */
+            if (l->seq_idx < 3) {
+                return -1;
+            }
+            if (l->seq[2] == '~') {
+                switch(l->seq[1]) {
+                case '3': /* Delete key. */
+                    linenoiseEditDelete(l);
+                    break;
+                default:
+                    break;
+                }
+            }
+        } else {
+            switch(l->seq[1]) {
+            case 'A': /* Up */
+                linenoiseEditHistoryNext(l, LINENOISE_HISTORY_PREV);
+                break;
+            case 'B': /* Down */
+                linenoiseEditHistoryNext(l, LINENOISE_HISTORY_NEXT);
+                break;
+            case 'C': /* Right */
+                linenoiseEditMoveRight(l);
+                break;
+            case 'D': /* Left */
+                linenoiseEditMoveLeft(l);
+                break;
+            case 'H': /* Home */
+                linenoiseEditMoveHome(l);
+                break;
+            case 'F': /* End*/
+                linenoiseEditMoveEnd(l);
+                break;
+            default:
+                break;
+            }
+        }
+    }
+
+    /* ESC O sequences. */
+    else if (l->seq[0] == 'O') {
+        switch(l->seq[1]) {
+        case 'H': /* Home */
+            linenoiseEditMoveHome(l);
+            break;
+        case 'F': /* End*/
+            linenoiseEditMoveEnd(l);
+            break;
+        default:
+            break;
+        }
+    }
+
+    l->mode = ln_read_regular;
+    return -1;
+}
 
 int lnReadUserInput(struct linenoiseState *l)
 {
     int c;
-    char seq[3];
 
     if (!uart_has_input(stdio_uart)) {
         return -1;
@@ -860,74 +939,8 @@ int lnReadUserInput(struct linenoiseState *l)
         linenoiseEditHistoryNext(l, LINENOISE_HISTORY_NEXT);
         break;
     case ESC:    /* escape sequence */
-        /* Read the next two bytes representing the escape sequence.
-            * Use two calls to handle slow terminals returning the two
-            * chars at different times. */
-        do {
-            c = console_getch();
-        } while (c < 0);
-        seq[0] = c;
-        do {
-            c = console_getch();
-        } while (c < 0);
-        seq[1] = c;
-
-        /* ESC [ sequences. */
-        if (seq[0] == '[') {
-            if (seq[1] >= '0' && seq[1] <= '9') {
-                /* Extended escape, read additional byte. */
-                    do {
-                        c = console_getch();
-                    } while (c < 0);
-                    seq[2] = c;
-                    if (seq[2] == '~') {
-                    switch(seq[1]) {
-                    case '3': /* Delete key. */
-                        linenoiseEditDelete(l);
-                        break;
-                    default:
-                        break;
-                    }
-                }
-            } else {
-                switch(seq[1]) {
-                case 'A': /* Up */
-                    linenoiseEditHistoryNext(l, LINENOISE_HISTORY_PREV);
-                    break;
-                case 'B': /* Down */
-                    linenoiseEditHistoryNext(l, LINENOISE_HISTORY_NEXT);
-                    break;
-                case 'C': /* Right */
-                    linenoiseEditMoveRight(l);
-                    break;
-                case 'D': /* Left */
-                    linenoiseEditMoveLeft(l);
-                    break;
-                case 'H': /* Home */
-                    linenoiseEditMoveHome(l);
-                    break;
-                case 'F': /* End*/
-                    linenoiseEditMoveEnd(l);
-                    break;
-                default:
-                    break;
-                }
-            }
-        }
-
-        /* ESC O sequences. */
-        else if (seq[0] == 'O') {
-            switch(seq[1]) {
-            case 'H': /* Home */
-                linenoiseEditMoveHome(l);
-                break;
-            case 'F': /* End*/
-                linenoiseEditMoveEnd(l);
-                break;
-            default:
-                break;
-            }
-        }
+        l->seq_idx = 0;
+        l->mode = ln_read_esc;
         break;
     default:
         if (linenoiseEditInsert(l, (char)c)) return -1;
@@ -979,8 +992,10 @@ int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
         lnInitState(&l, buf, buflen, prompt);
 
     // fall through
-    case ln_reading:
+    case ln_read_regular:
         return lnReadUserInput(&l);
+    case ln_read_esc:
+        return lnReadEscSequence(&l);
     }
     return -1;
 }
