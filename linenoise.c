@@ -187,9 +187,8 @@ FILE *lndebug_fp = NULL;
         if (lndebug_fp == NULL) { \
             lndebug_fp = fopen("/tmp/lndebug.txt","a"); \
             fprintf(lndebug_fp, \
-            "[%d %d %d] p: %d, rows: %d, rpos: %d, max: %d, oldmax: %d\n", \
-            (int)l->len,(int)l->pos,(int)l->oldpos,plen,rows,rpos, \
-            (int)l->maxrows,old_rows); \
+            "[%zu %zu %zu] p: %zu, rows: %zu, rpos: %zu, max: %zu, oldmax: %zu\n", \
+            l->len,l->pos,l->oldpos,plen,rows,rpos,l->maxrows,old_rows); \
         } \
         fprintf(lndebug_fp, ", " __VA_ARGS__); \
         fflush(lndebug_fp); \
