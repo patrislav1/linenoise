@@ -976,12 +976,11 @@ static int lnCompletion(struct linenoiseState *ls)
 
 static int lnReadUserInput(struct linenoiseState *l)
 {
-    int c;
+    int c = console_getch();
 
-    if (!uart_has_input(stdio_uart)) {
+    if (c < 0) {
         return -1;
     }
-    c = uart_getch(stdio_uart);
 
     return lnHandleCharacter(l, (char)c);
 }
