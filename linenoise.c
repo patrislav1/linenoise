@@ -144,7 +144,6 @@ struct linenoiseState {
         ln_init = 0,
         ln_reading
     } mode;
-    int ifd;            /* Terminal stdin file descriptor. */
     char *buf;          /* Edited line buffer. */
     size_t buflen;      /* Edited line buffer size. */
     const char *prompt; /* Prompt to display. */
@@ -202,7 +201,6 @@ FILE *lndebug_fp = NULL;
 
 /* ======================= Low level terminal handling ====================== */
 
-#if 0
 static int console_getch()
 {
     if (!uart_has_input(stdio_uart)) {
@@ -210,7 +208,6 @@ static int console_getch()
     }
     return uart_getch(stdio_uart);
 }
-#endif
 
 static inline void console_write(const char *buf, size_t n)
 {
@@ -231,7 +228,7 @@ void linenoiseSetMultiLine(bool ml)
 /* Use the ESC [6n escape sequence to query the horizontal cursor position
  * and return it. On error -1 is returned, on success the position of the
  * cursor. */
-static ssize_t getCursorPosition(int ifd)
+static ssize_t getCursorPosition()
 {
     char buf[32];
     size_t cols, rows;
@@ -242,7 +239,11 @@ static ssize_t getCursorPosition(int ifd)
 
     /* Read the response: ESC [ rows ; cols R */
     while (i < sizeof(buf) - 1) {
-        if (read(ifd, buf + i, 1) != 1) break;
+        int c;
+        do {
+            c = console_getch();
+        } while (c < 0);
+        buf[i] = c;
         if (buf[i] == 'R') break;
         i++;
     }
@@ -256,17 +257,17 @@ static ssize_t getCursorPosition(int ifd)
 
 /* Try to get the number of columns in the current terminal, or assume 80
  * if it fails. */
-static size_t getColumns(int ifd)
+static size_t getColumns()
 {
     ssize_t start, cols;
 
     /* Get the initial position so we can restore it later. */
-    start = getCursorPosition(ifd);
+    start = getCursorPosition();
     if (start == -1) goto failed;
 
     /* Go to right margin and get position. */
     console_write_string("\x1b[999C");
-    cols = getCursorPosition(ifd);
+    cols = getCursorPosition();
     if (cols == -1) goto failed;
 
     /* Restore position. */
@@ -319,9 +320,7 @@ static void freeCompletions(linenoiseCompletions *lc)
 static int completeLine(struct linenoiseState *ls)
 {
     linenoiseCompletions lc = { 0, NULL };
-    ssize_t nread;
-    size_t nwritten;
-    char c = 0;
+    int c = 0;
 
     completionCallback(ls->buf, &lc);
     if (lc.len == 0) {
@@ -344,11 +343,9 @@ static int completeLine(struct linenoiseState *ls)
                 refreshLine(ls);
             }
 
-            nread = read(ls->ifd, &c, 1);
-            if (nread <= 0) {
-                freeCompletions(&lc);
-                return -1;
-            }
+            do {
+                c = console_getch();
+            } while (c < 0);
 
             switch(c) {
             case 9: /* tab */
@@ -363,8 +360,7 @@ static int completeLine(struct linenoiseState *ls)
             default:
                 /* Update buffer and return */
                 if (i < lc.len) {
-                    nwritten = (size_t)snprintf(ls->buf, ls->buflen, "%s", lc.cvec[i]);
-                    ls->len = ls->pos = nwritten;
+                    ls->len = ls->pos = (size_t)snprintf(ls->buf, ls->buflen, "%s", lc.cvec[i]);
                 }
 
                 stop = 1;
@@ -766,14 +762,13 @@ void lnInitState(struct linenoiseState *l, char *buf, size_t buflen, const char 
 {
     /* Populate the linenoise state that we pass to functions implementing
     * specific editing functionalities. */
-    l->ifd = STDIN_FILENO;
     l->buf = buf;
     l->buflen = buflen;
     l->prompt = prompt;
     l->plen = strlen(prompt);
     l->oldpos = l->pos = 0;
     l->len = 0;
-    l->cols = (size_t)getColumns(l->ifd);
+    l->cols = (size_t)getColumns();
     l->maxrows = 0;
     l->history_index = 0;
 
@@ -868,15 +863,24 @@ int lnReadUserInput(struct linenoiseState *l)
         /* Read the next two bytes representing the escape sequence.
             * Use two calls to handle slow terminals returning the two
             * chars at different times. */
-        if (read(l->ifd, seq, 1) == -1) break;
-        if (read(l->ifd, seq + 1, 1) == -1) break;
+        do {
+            c = console_getch();
+        } while (c < 0);
+        seq[0] = c;
+        do {
+            c = console_getch();
+        } while (c < 0);
+        seq[1] = c;
 
         /* ESC [ sequences. */
         if (seq[0] == '[') {
             if (seq[1] >= '0' && seq[1] <= '9') {
                 /* Extended escape, read additional byte. */
-                if (read(l->ifd, seq + 2, 1) == -1) break;
-                if (seq[2] == '~') {
+                    do {
+                        c = console_getch();
+                    } while (c < 0);
+                    seq[2] = c;
+                    if (seq[2] == '~') {
                     switch(seq[1]) {
                     case '3': /* Delete key. */
                         linenoiseEditDelete(l);
@@ -993,11 +997,12 @@ void linenoisePrintKeyCodes(void)
 
     memset(quit, ' ', sizeof(quit));
     while(1) {
-        char c;
-        ssize_t nread;
+        int c;
 
-        nread = read(STDIN_FILENO, &c, 1);
-        if (nread <= 0) continue;
+        do {
+            c = console_getch();
+        } while (c < 0);
+
         memmove(quit, quit + 1, sizeof(quit) - 1); /* shift string to left. */
         quit[sizeof(quit) - 1] = c; /* Insert current char on the right. */
         if (memcmp(quit, "quit", sizeof(quit)) == 0) break;
