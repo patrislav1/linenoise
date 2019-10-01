@@ -250,7 +250,7 @@ static ssize_t getCursorPosition()
         do {
             c = console_getch();
         } while (c < 0);
-        buf[i] = c;
+        buf[i] = (char)c;
         if (buf[i] == 'R') break;
         i++;
     }
@@ -781,7 +781,7 @@ int lnReadEscSequence(struct linenoiseState *l)
         // This should never happen ...
         return -1;
     }
-    l->seq[l->seq_idx++] = c;
+    l->seq[l->seq_idx++] = (char)c;
     if (l->seq_idx < 2) {
         // We need at least 2 characters
         return -1;
@@ -964,9 +964,7 @@ static int lnCompletion(struct linenoiseState *ls)
     default:
         /* Update buffer and return */
         if (ls->completion_idx < ls->lc.len) {
-            size_t len = snprintf(ls->buf, ls->buflen, "%s", ls->lc.cvec[ls->completion_idx]);
-            ls->len = len;
-            ls->pos = len;
+            ls->len = ls->pos = (size_t)snprintf(ls->buf, ls->buflen, "%s", ls->lc.cvec[ls->completion_idx]);
         }
         break;
     }
@@ -1037,7 +1035,7 @@ void linenoisePrintKeyCodes(void)
         } while (c < 0);
 
         memmove(quit, quit + 1, sizeof(quit) - 1); /* shift string to left. */
-        quit[sizeof(quit) - 1] = c; /* Insert current char on the right. */
+        quit[sizeof(quit) - 1] = (char)c; /* Insert current char on the right. */
         if (memcmp(quit, "quit", sizeof(quit)) == 0) break;
 
         printf("'%c' %02x (%d) (type quit to exit)\n",
