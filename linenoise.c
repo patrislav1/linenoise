@@ -140,16 +140,29 @@ static char **history = NULL;
  * We pass this state to functions implementing specific editing
  * functionalities. */
 struct linenoiseState {
+    /* Current mode of line editor state machine */
     enum {
         ln_init = 0,
         ln_read_regular,
         ln_read_esc,
-        ln_completion
+        ln_completion,
+        ln_getColumns,
+        ln_getColumns_1,
+        ln_getColumns_2
     } mode;
+
+    /* State for esc sequence handling */
     char seq[3];        /* Esc sequence buffer. */
     size_t seq_idx;     /* Esc sequence read index. */
+
+    /* State for completion handling */
     size_t completion_idx; /* Auto-completion selected entry index. */
     linenoiseCompletions lc;
+
+    /* State for cursor pos. / column retrieval */
+    char cur_pos_buf[32];
+    ssize_t cur_pos_idx;
+    ssize_t cur_pos_initial;
 
     char *buf;          /* Edited line buffer. */
     size_t buflen;      /* Edited line buffer size. */
@@ -233,61 +246,90 @@ void linenoiseSetMultiLine(bool ml)
 }
 
 /* Use the ESC [6n escape sequence to query the horizontal cursor position
- * and return it. On error -1 is returned, on success the position of the
- * cursor. */
-static ssize_t getCursorPosition()
+ * and return it.
+ * Return values:
+ *  -2: error
+ *  -1: unfinished / call again.
+ * >=0: cursor position.
+ */
+static ssize_t getCursorPosition(struct linenoiseState *ls)
 {
-    char buf[32];
-    size_t cols, rows;
-    size_t i = 0;
-
-    /* Report cursor location */
-    console_write_string("\x1b[6n");
-
-    /* Read the response: ESC [ rows ; cols R */
-    while (i < sizeof(buf) - 1) {
-        int c;
-        do {
-            c = console_getch();
-        } while (c < 0);
-        buf[i] = (char)c;
-        if (buf[i] == 'R') break;
-        i++;
+    if (ls->cur_pos_idx < 0) {
+        ls->cur_pos_idx = 0;
+        /* Query cursor location */
+        console_write_string("\x1b[6n");
+        return -1;
     }
-    buf[i] = '\0';
+    
+    // Read one character
+    int c = console_getch();
+    if (c < 0) {
+        return -1;
+    }
 
-    /* Parse it. */
-    if (buf[0] != ESC || buf[1] != '[') return -1;
-    if (sscanf(buf + 2, "%zu;%zu", &rows, &cols) != 2) return -1;
+    // Store until 'R' or buffer full
+    ls->cur_pos_buf[ls->cur_pos_idx++] = c;
+    if (c != 'R' && ls->cur_pos_idx < (ssize_t)sizeof(ls->cur_pos_buf) - 1) {
+        return -1;
+    }
+
+    ls->cur_pos_buf[ls->cur_pos_idx] = '\0';
+
+    ssize_t rows, cols;
+    if (sscanf(ls->cur_pos_buf, "\x1b[%zu;%zu", &rows, &cols) != 2) return -2;
     return (ssize_t)cols;
 }
 
 /* Try to get the number of columns in the current terminal, or assume 80
  * if it fails. */
-static size_t getColumns()
+static int getColumns(struct linenoiseState *ls)
 {
-    ssize_t start, cols;
+    ssize_t result;
+    switch (ls->mode) {
+    case ln_getColumns:
+    default:
+        /* Get the initial position so we can restore it later. */
+        ls->cur_pos_idx = -1;
+        ls->mode = ln_getColumns_1;
+        // fall through
+    case ln_getColumns_1:
+        result = getCursorPosition(ls);
+        if (result == -1) {
+            return -1;
+        } else if (result == -2) {
+            goto failed;
+        }
+        ls->cur_pos_initial = result;
 
-    /* Get the initial position so we can restore it later. */
-    start = getCursorPosition();
-    if (start == -1) goto failed;
+        /* Go to right margin and get position. */
+        console_write_string("\x1b[999C");
 
-    /* Go to right margin and get position. */
-    console_write_string("\x1b[999C");
-    cols = getCursorPosition();
-    if (cols == -1) goto failed;
-
-    /* Restore position. */
-    if (cols > start) {
-        char seq[16];
-        snprintf(seq, sizeof(seq), "\x1b[%zuD", cols - start);
-        console_write_string(seq);
+        ls->cur_pos_idx = -1;
+        ls->mode = ln_getColumns_2;
+        // fall through
+    case ln_getColumns_2:
+        result = getCursorPosition(ls);
+        if (result == -1) {
+            return -1;
+        } else if (result == -2) {
+            goto failed;
+        }
+        ls->cols = result;
+        /* Restore position. */
+        if ((ssize_t)ls->cols > ls->cur_pos_initial) {
+            char seq[16];
+            snprintf(seq, sizeof(seq), "\x1b[%zuD", ls->cols - ls->cur_pos_initial);
+            console_write_string(seq);
+        }
+        break;
     }
-
-    return (size_t)cols;
+finished:
+    ls->mode = ln_read_regular;
+    return 0;
 
 failed:
-    return 80;
+    ls->cols = result;
+    goto finished;
 }
 
 /* Clear the screen. Used to handle ctrl+l */
@@ -753,7 +795,6 @@ static void lnInitState(struct linenoiseState *l, char *buf, size_t buflen, cons
     l->plen = strlen(prompt);
     l->oldpos = l->pos = 0;
     l->len = 0;
-    l->cols = (size_t)getColumns();
     l->maxrows = 0;
     l->history_index = 0;
 
@@ -767,7 +808,7 @@ static void lnInitState(struct linenoiseState *l, char *buf, size_t buflen, cons
 
     console_write_string(prompt);
 
-    l->mode = ln_read_regular;
+    l->mode = ln_getColumns;
 }
 
 static int lnReadEscSequence(struct linenoiseState *l)
@@ -1003,7 +1044,13 @@ int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
     case ln_init:
     default:
         lnInitState(&l, buf, buflen, prompt);
-
+    // fall through
+    case ln_getColumns:
+    case ln_getColumns_1:
+    case ln_getColumns_2:
+        if (getColumns(&l) < 0) {
+            return -1;
+        }
     // fall through
     case ln_read_regular:
         return lnReadUserInput(&l);
