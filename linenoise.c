@@ -121,6 +121,7 @@
 
 #include "periph/mux_uart.h"
 #include "util/timeout.h"
+#include "macros.h"
 
 extern mux_uart_index_t stdio_uart;
 
@@ -486,10 +487,6 @@ static void abFree(struct abuf *ab)
 {
     free(ab->b);
 }
-
-#ifndef MIN
-#define MIN(X,Y) (((X) < (Y)) ? (X) : (Y))
-#endif
 
 /* Helper of refreshSingleLine() and refreshMultiLine() to show hints
  * to the right of the prompt. */
