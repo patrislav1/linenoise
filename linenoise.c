@@ -124,13 +124,12 @@
 
 extern mux_uart_index_t stdio_uart;
 
+extern void linenoise_completion(const char *, linenoiseCompletions *);
+extern const char *linenoise_hints(const char *, int *color, bool *bold);
+
+
 #define LINENOISE_DEFAULT_HISTORY_MAX_LEN 100
 #define LINENOISE_MAX_LINE 4096
-
-// static char *unsupported_term[] = {"dumb","cons25","emacs",NULL};
-static linenoiseCompletionCallback *completionCallback = NULL;
-static linenoiseHintsCallback *hintsCallback = NULL;
-static linenoiseFreeHintsCallback *freeHintsCallback = NULL;
 
 static bool mlmode = 0;  /* Multi line mode. Default is single line. */
 static size_t history_max_len = LINENOISE_DEFAULT_HISTORY_MAX_LEN;
@@ -406,7 +405,7 @@ static void lnShowCompletion(struct linenoiseState *ls)
 static void completeLine(struct linenoiseState *ls)
 {
     ls->lc = (linenoiseCompletions){ 0, NULL };
-    completionCallback(ls->buf, &ls->lc);
+    linenoise_completion(ls->buf, &ls->lc);
 
     if (ls->lc.len == 0) {
         linenoiseBeep();
@@ -416,26 +415,6 @@ static void completeLine(struct linenoiseState *ls)
         ls->mode = ln_completion;
         lnShowCompletion(ls);
     }
-}
-
-/* Register a callback function to be called for tab-completion. */
-void linenoiseSetCompletionCallback(linenoiseCompletionCallback *fn)
-{
-    completionCallback = fn;
-}
-
-/* Register a hits function to be called to show hits to the user at the
- * right of the prompt. */
-void linenoiseSetHintsCallback(linenoiseHintsCallback *fn)
-{
-    hintsCallback = fn;
-}
-
-/* Register a function to free the hints returned by the hints callback
- * registered with linenoiseSetHintsCallback(). */
-void linenoiseSetFreeHintsCallback(linenoiseFreeHintsCallback *fn)
-{
-    freeHintsCallback = fn;
 }
 
 /* This function is used by the callback function registered by the user
@@ -500,10 +479,10 @@ static void refreshShowHints(struct abuf *ab, struct linenoiseState *l, size_t p
 {
     char seq[64] = " ";
 
-    if (hintsCallback && plen + l->len < l->cols) {
+    if (plen + l->len < l->cols) {
         int color = -1;
         bool bold = false;
-        const char *hint = hintsCallback(l->buf, &color, &bold);
+        const char *hint = linenoise_hints(l->buf, &color, &bold);
         if (hint) {
             size_t hintlen = strlen(hint);
             size_t hintmaxlen = l->cols - (plen + l->len);
@@ -518,9 +497,6 @@ static void refreshShowHints(struct abuf *ab, struct linenoiseState *l, size_t p
 
             if (color != -1 || bold != 0)
                 abAppend(ab, "\033[0m", 4);
-
-            /* Call the function to free the hint returned. */
-            if (freeHintsCallback) freeHintsCallback(hint);
         }
     }
 }
@@ -690,13 +666,7 @@ static int linenoiseEditInsert(struct linenoiseState *l, char c)
             l->pos++;
             l->len++;
             l->buf[l->len] = '\0';
-            if ((!mlmode && l->plen + l->len < l->cols && !hintsCallback)) {
-                /* Avoid a full update of the line in the
-                 * trivial case. */
-                console_write(&c, 1);
-            } else {
-                refreshLine(l);
-            }
+            refreshLine(l);
         } else {
             memmove(l->buf + l->pos + 1, l->buf + l->pos, l->len - l->pos);
             l->buf[l->pos] = c;
@@ -933,7 +903,7 @@ static int lnHandleCharacter(struct linenoiseState *l, char c)
     /* Only autocomplete when the callback is set. It returns < 0 when
         * there was an error reading from fd. Otherwise it will return the
         * character that should be handled next. */
-    if (c == '\t' && completionCallback != NULL) {
+    if (c == '\t') {
         completeLine(l);
         return -1;
     }
