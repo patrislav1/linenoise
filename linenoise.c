@@ -905,6 +905,16 @@ static int lnReadEscSequence(struct linenoiseState *l)
     return -1;
 }
 
+static void lnRestartState(struct linenoiseState *l)
+{
+    // Restart state after line is finished.
+    // Only re-query column width, if we're connected to a smart terminal.
+    // If not, we go straight to command prompt.
+    // (Avoid spamming dumb terminals with escape sequences).
+
+    l->mode = l->smart_term_connected ? ln_getColumns : ln_init;
+}
+
 static int lnHandleCharacter(struct linenoiseState *l, char c)
 {
     /* Only autocomplete when the callback is set. It returns < 0 when
@@ -928,7 +938,7 @@ static int lnHandleCharacter(struct linenoiseState *l, char c)
             refreshLine(l);
             hintsCallback = hc;
         }
-        l->mode = ln_getColumns;
+        lnRestartState(l);
         return (int)l->len;
     case CTRL_C:     /* ctrl-c */
         errno = EAGAIN;
@@ -1008,13 +1018,13 @@ static int lnHandleCharacterDumb(struct linenoiseState *l, char c)
     // console_write(&c, 1);
     if (c == '\r' || c == '\n') {
         l->buf[l->pos] = '\0';
-        l->mode = ln_getColumns;
+        lnRestartState(l);
         return (int)l->pos;
     } else {
         l->buf[l->pos++] = c;
         if (l->pos >= l->buflen - 1) {
             l->buf[l->buflen - 1] = '\0';
-            l->mode = ln_getColumns;
+            lnRestartState(l);
             return (int)l->pos;
         }
     }
