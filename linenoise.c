@@ -340,7 +340,7 @@ finished:
 
 failed:
     ls->smart_term_connected = false;
-    ls->cols = result;
+    ls->cols = 80;
     goto finished;
 }
 
