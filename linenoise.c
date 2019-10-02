@@ -353,6 +353,7 @@ failed:
 void linenoiseClearScreen(void)
 {
     console_write_string("\x1b[H\x1b[2J");
+    l_state.mode = ln_getColumns;
 }
 
 /* Beep, used for completion when there is nothing to complete or when all
