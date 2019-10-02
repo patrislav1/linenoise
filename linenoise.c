@@ -529,7 +529,7 @@ static void refreshShowHints(struct abuf *ab, struct linenoiseState *l, size_t p
  *
  * Rewrite the currently edited line accordingly to the buffer content,
  * cursor position, and number of columns of the terminal. */
-static void refreshSingleLine(struct linenoiseState *l)
+static void refreshSingleLine(struct linenoiseState *l, bool showHints)
 {
     char seq[64];
     size_t plen = strlen(l->prompt);
@@ -556,8 +556,10 @@ static void refreshSingleLine(struct linenoiseState *l)
     /* Write the prompt and the current buffer content */
     abAppend(&ab, l->prompt, strlen(l->prompt));
     abAppend(&ab, buf, len);
-    /* Show hits if any. */
-    refreshShowHints(&ab, l, plen);
+    if (showHints) {
+        /* Show hits if any. */
+        refreshShowHints(&ab, l, plen);
+    }
     /* Erase to right */
     snprintf(seq, sizeof(seq), "\x1b[0K");
     abAppend(&ab, seq, strlen(seq));
@@ -574,7 +576,7 @@ static void refreshSingleLine(struct linenoiseState *l)
  *
  * Rewrite the currently edited line accordingly to the buffer content,
  * cursor position, and number of columns of the terminal. */
-static void refreshMultiLine(struct linenoiseState *l)
+static void refreshMultiLine(struct linenoiseState *l, bool showHints)
 {
     char seq[64];
     size_t plen = strlen(l->prompt);
@@ -614,8 +616,10 @@ static void refreshMultiLine(struct linenoiseState *l)
     abAppend(&ab, l->prompt, strlen(l->prompt));
     abAppend(&ab, l->buf, l->len);
 
-    /* Show hits if any. */
-    refreshShowHints(&ab, l, plen);
+    if (showHints) {
+        /* Show hits if any. */
+        refreshShowHints(&ab, l, plen);
+    }
 
     /* If we are at the very end of the screen with our prompt, we need to
      * emit a newline and move the prompt to the first column. */
@@ -662,9 +666,17 @@ static void refreshMultiLine(struct linenoiseState *l)
 static void refreshLine(struct linenoiseState *l)
 {
     if (mlmode)
-        refreshMultiLine(l);
+        refreshMultiLine(l, true);
     else
-        refreshSingleLine(l);
+        refreshSingleLine(l, true);
+}
+
+static void refreshLineNoHints(struct linenoiseState *l)
+{
+    if (mlmode)
+        refreshMultiLine(l, false);
+    else
+        refreshSingleLine(l, false);
 }
 
 /* Insert the character 'c' at cursor current position.
@@ -931,14 +943,9 @@ static int lnHandleCharacter(struct linenoiseState *l, char c)
         history_len--;
         free(history[history_len]);
         if (mlmode) linenoiseEditMoveEnd(l);
-        if (hintsCallback) {
-            /* Force a refresh without hints to leave the previous
-                * line as the user typed it after a newline. */
-            linenoiseHintsCallback *hc = hintsCallback;
-            hintsCallback = NULL;
-            refreshLine(l);
-            hintsCallback = hc;
-        }
+        /* Force a refresh without hints to leave the previous
+            * line as the user typed it after a newline. */
+        refreshLineNoHints(l);
         lnRestartState(l);
         return (int)l->len;
     case CTRL_C:     /* ctrl-c */
