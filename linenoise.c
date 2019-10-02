@@ -1002,6 +1002,25 @@ static int lnHandleCharacter(struct linenoiseState *l, char c)
     return -1;
 }
 
+static int lnHandleCharacterDumb(struct linenoiseState *l, char c)
+{
+    // dumb terminals usually don't need local echo
+    // console_write(&c, 1);
+    if (c == '\r' || c == '\n') {
+        l->buf[l->pos] = '\0';
+        l->mode = ln_getColumns;
+        return (int)l->pos;
+    } else {
+        l->buf[l->pos++] = c;
+        if (l->pos >= l->buflen - 1) {
+            l->buf[l->buflen - 1] = '\0';
+            l->mode = ln_getColumns;
+            return (int)l->pos;
+        }
+    }
+    return -1;
+}
+
 static int lnCompletion(struct linenoiseState *ls)
 {
     int c = console_getch();
@@ -1040,7 +1059,11 @@ static int lnReadUserInput(struct linenoiseState *l)
         return -1;
     }
 
-    return lnHandleCharacter(l, (char)c);
+    if (l->smart_term_connected) {
+        return lnHandleCharacter(l, (char)c);
+    } else {
+        return lnHandleCharacterDumb(l, (char)c);
+    }
 }
 
 /* This function is the core of the line editing capability of linenoise.
