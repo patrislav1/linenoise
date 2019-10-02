@@ -125,8 +125,7 @@
 extern mux_uart_index_t stdio_uart;
 
 extern void linenoise_completion(const char *, linenoiseCompletions *);
-extern const char *linenoise_hints(const char *, int *color, bool *bold);
-
+extern const char **linenoise_hints(const char *buf);
 
 #define LINENOISE_DEFAULT_HISTORY_MAX_LEN 100
 #define LINENOISE_MAX_LINE 4096
@@ -473,30 +472,40 @@ static void abFree(struct abuf *ab)
     free(ab->b);
 }
 
+#ifndef MIN
+#define MIN(X,Y) (((X) < (Y)) ? (X) : (Y))
+#endif
+
 /* Helper of refreshSingleLine() and refreshMultiLine() to show hints
  * to the right of the prompt. */
 static void refreshShowHints(struct abuf *ab, struct linenoiseState *l, size_t plen)
 {
-    char seq[64] = " ";
+    char seq[64] = " \033[0;35;49m";
 
-    if (plen + l->len < l->cols) {
-        int color = -1;
-        bool bold = false;
-        const char *hint = linenoise_hints(l->buf, &color, &bold);
-        if (hint) {
-            size_t hintlen = strlen(hint);
-            size_t hintmaxlen = l->cols - (plen + l->len);
-            if (hintlen > hintmaxlen) hintlen = hintmaxlen;
-            if (bold && color == -1) color = 37;
-
-            if (color != -1 || bold)
-                snprintf(seq, sizeof(seq), " \033[%d;%d;49m", bold, color);
-
+    ssize_t cols_avail = l->cols - (plen + l->len + 1);
+    if (cols_avail > 0) {
+        const char **hints = linenoise_hints(l->buf);
+        if (hints) {
+            // By convention, it returns a char*[2]
+            // hints[0] = cmd args [optional]
+            // hints[1] = cmd desc
             abAppend(ab, seq, strlen(seq));
-            abAppend(ab, hint, hintlen);
-
-            if (color != -1 || bold != 0)
-                abAppend(ab, "\033[0m", 4);
+            if (*hints[0] != '\0') {
+                size_t abLen = MIN(strlen(hints[0]), (size_t)cols_avail);
+                abAppend(ab, hints[0], abLen);
+                cols_avail -= abLen;
+                if (cols_avail > 0) {
+                    abAppend(ab, " ", 1);
+                    cols_avail--;
+                }
+            }
+            if (cols_avail > 0) {
+                const char *bold_on_seq = "\033[1;35;49m";
+                abAppend(ab, bold_on_seq, strlen(bold_on_seq));
+                size_t abLen = MIN(strlen(hints[1]), (size_t)cols_avail);
+                abAppend(ab, hints[1], abLen);
+            }
+            abAppend(ab, "\033[0m", 4);
         }
     }
 }
