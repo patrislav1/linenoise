@@ -124,8 +124,21 @@
 
 extern mux_uart_index_t stdio_uart;
 
-extern void linenoise_completion(const char *, linenoiseCompletions *);
-extern const char **linenoise_hints(const char *buf);
+// Dummy functions provided for completion and hints, can be overridden by user code.
+void linenoise_completion(const char *buf, linenoiseCompletions *lc) __attribute__((weak));
+const char **linenoise_hints(const char *buf) __attribute__((weak));
+
+void linenoise_completion(const char *buf, linenoiseCompletions *lc)
+{
+    (void)buf;
+    (void)lc;
+}
+
+const char **linenoise_hints(const char *buf)
+{
+    (void)buf;
+    return NULL;
+}
 
 #define LINENOISE_DEFAULT_HISTORY_MAX_LEN 100
 #define LINENOISE_MAX_LINE 4096
@@ -482,7 +495,7 @@ static void refreshShowHints(struct abuf *ab, struct linenoiseState *l, size_t p
 {
     char seq[64] = " \033[0;35;49m";
 
-    ssize_t cols_avail = l->cols - (plen + l->len + 1);
+    ssize_t cols_avail = (ssize_t)(l->cols - (plen + l->len + 1));
     if (cols_avail > 0) {
         const char **hints = linenoise_hints(l->buf);
         if (hints) {
@@ -493,7 +506,7 @@ static void refreshShowHints(struct abuf *ab, struct linenoiseState *l, size_t p
             if (*hints[0] != '\0') {
                 size_t abLen = MIN(strlen(hints[0]), (size_t)cols_avail);
                 abAppend(ab, hints[0], abLen);
-                cols_avail -= abLen;
+                cols_avail -= (ssize_t)abLen;
                 if (cols_avail > 0) {
                     abAppend(ab, " ", 1);
                     cols_avail--;
