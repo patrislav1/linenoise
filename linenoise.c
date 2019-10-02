@@ -278,7 +278,7 @@ static ssize_t getCursorPosition(struct linenoiseState *ls)
     }
 
     // Store until 'R' or buffer full
-    ls->cur_pos_buf[ls->cur_pos_idx++] = c;
+    ls->cur_pos_buf[ls->cur_pos_idx++] = (char)c;
     if (c != 'R' && ls->cur_pos_idx < (ssize_t)sizeof(ls->cur_pos_buf) - 1) {
         return -1;
     }
@@ -286,7 +286,7 @@ static ssize_t getCursorPosition(struct linenoiseState *ls)
     ls->cur_pos_buf[ls->cur_pos_idx] = '\0';
 
     ssize_t rows, cols;
-    if (sscanf(ls->cur_pos_buf, "\x1b[%zu;%zu", &rows, &cols) != 2) return -2;
+    if (sscanf(ls->cur_pos_buf, "\x1b[%zd;%zd", &rows, &cols) != 2) return -2;
     return (ssize_t)cols;
 }
 
@@ -296,6 +296,11 @@ static int getColumns(struct linenoiseState *ls)
 {
     ssize_t result;
     switch (ls->mode) {
+    case ln_init:
+    case ln_read_regular:
+    case ln_read_esc:
+    case ln_completion:
+    // Above case statements only for -Werror=switch-enum
     case ln_getColumns:
     default:
         /* Get the initial position so we can restore it later. */
@@ -325,11 +330,11 @@ static int getColumns(struct linenoiseState *ls)
         } else if (result == -2) {
             goto failed;
         }
-        ls->cols = result;
+        ls->cols = (size_t)result;
         /* Restore position. */
         if ((ssize_t)ls->cols > ls->cur_pos_initial) {
             char seq[16];
-            snprintf(seq, sizeof(seq), "\x1b[%zuD", ls->cols - ls->cur_pos_initial);
+            snprintf(seq, sizeof(seq), "\x1b[%zuD", ls->cols - (size_t)ls->cur_pos_initial);
             console_write_string(seq);
         }
         break;
@@ -1082,6 +1087,8 @@ void linenoiseRefreshEditor()
     case ln_completion:
         lnShowCompletion(&l_state);
         break;
+    case ln_read_regular:
+    case ln_read_esc:
     default:
         refreshLine(&l_state);
         break;
