@@ -280,7 +280,7 @@ static ssize_t getCursorPosition(struct linenoiseState *ls)
         timeout_set(&ls->cur_pos_timeout, 100);
         return -1;
     }
-    
+
     // Read one character
     int c = console_getch();
     if (c < 0) {
@@ -317,7 +317,7 @@ static int getColumns(struct linenoiseState *ls)
         /* Get the initial position so we can restore it later. */
         ls->cur_pos_idx = -1;
         ls->mode = ln_getColumns_1;
-        // fall through
+    // fall through
     case ln_getColumns_1:
         result = getCursorPosition(ls);
         if (result == -1) {
@@ -333,7 +333,7 @@ static int getColumns(struct linenoiseState *ls)
 
         ls->cur_pos_idx = -1;
         ls->mode = ln_getColumns_2;
-        // fall through
+    // fall through
     case ln_getColumns_2:
         result = getCursorPosition(ls);
         if (result == -1) {
@@ -387,7 +387,7 @@ static void freeCompletions(linenoiseCompletions *lc)
 
     if (lc->cvec != NULL)
         free(lc->cvec);
-    
+
     lc->len = 0;
 }
 
@@ -416,7 +416,9 @@ static void lnShowCompletion(struct linenoiseState *ls)
  * structure as described in the structure definition. */
 static void completeLine(struct linenoiseState *ls)
 {
-    ls->lc = (linenoiseCompletions){ 0, NULL };
+    ls->lc = (linenoiseCompletions) {
+        0, NULL
+    };
     linenoise_completion(ls->buf, &ls->lc);
 
     if (ls->lc.len == 0) {
