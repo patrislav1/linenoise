@@ -552,7 +552,10 @@ static void refreshSingleLine(struct linenoiseState *l, bool showHints)
     abAppendLit(&ab, "\r");
 
     /* Write the prompt and the current buffer content */
+    abAppendLit(&ab, "\x1b[1;37;49m");
     abAppend(&ab, l->prompt, strlen(l->prompt));
+    abAppendLit(&ab, "\x1b[0m");
+
     abAppend(&ab, buf, len);
 
     if (showHints) {
@@ -614,7 +617,10 @@ static void refreshMultiLine(struct linenoiseState *l, bool showHints)
     abAppendLit(&ab, "\r\x1b[0K");
 
     /* Write the prompt and the current buffer content */
+    abAppendLit(&ab, "\x1b[1;37;49m");
     abAppend(&ab, l->prompt, strlen(l->prompt));
+    abAppendLit(&ab, "\x1b[0m");
+
     abAppend(&ab, l->buf, l->len);
 
     if (showHints) {
