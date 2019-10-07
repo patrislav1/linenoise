@@ -483,6 +483,10 @@ static void abAppend(struct abuf *ab, const char *s, size_t len)
     ab->len += len;
 }
 
+static void abAppendLit(struct abuf *ab, const char *s) {
+    abAppend(ab, s, strlen(s));
+}
+
 static void abFree(struct abuf *ab)
 {
     free(ab->b);
@@ -492,8 +496,6 @@ static void abFree(struct abuf *ab)
  * to the right of the prompt. */
 static void refreshShowHints(struct abuf *ab, struct linenoiseState *l, size_t plen)
 {
-    char seq[64] = " \033[0;35;49m";
-
     ssize_t cols_avail = (ssize_t)(l->cols - (plen + l->len + 1));
     if (cols_avail > 0) {
         const char **hints = linenoise_hints(l->buf);
@@ -501,23 +503,22 @@ static void refreshShowHints(struct abuf *ab, struct linenoiseState *l, size_t p
             // By convention, it returns a char*[2]
             // hints[0] = cmd args [optional]
             // hints[1] = cmd desc
-            abAppend(ab, seq, strlen(seq));
+            abAppendLit(ab, " \033[0;35;49m");
             if (*hints[0] != '\0') {
                 size_t abLen = MIN(strlen(hints[0]), (size_t)cols_avail);
                 abAppend(ab, hints[0], abLen);
                 cols_avail -= (ssize_t)abLen;
                 if (cols_avail > 0) {
-                    abAppend(ab, " ", 1);
+                    abAppendLit(ab, " ");
                     cols_avail--;
                 }
             }
             if (cols_avail > 0) {
-                const char *bold_on_seq = "\033[1;35;49m";
-                abAppend(ab, bold_on_seq, strlen(bold_on_seq));
+                abAppendLit(ab, "\033[1;35;49m");
                 size_t abLen = MIN(strlen(hints[1]), (size_t)cols_avail);
                 abAppend(ab, hints[1], abLen);
             }
-            abAppend(ab, "\033[0m", 4);
+            abAppendLit(ab, "\033[0m");
         }
     }
 }
@@ -528,13 +529,11 @@ static void refreshShowHints(struct abuf *ab, struct linenoiseState *l, size_t p
  * cursor position, and number of columns of the terminal. */
 static void refreshSingleLine(struct linenoiseState *l, bool showHints)
 {
-    char seq[64];
     size_t plen = strlen(l->prompt);
 
     char *buf = l->buf;
     size_t len = l->len;
     size_t pos = l->pos;
-    struct abuf ab;
 
     while((plen + pos) >= l->cols) {
         buf++;
@@ -546,21 +545,26 @@ static void refreshSingleLine(struct linenoiseState *l, bool showHints)
         len--;
     }
 
+    struct abuf ab;
     abInit(&ab);
+
     /* Cursor to left edge */
-    snprintf(seq, sizeof(seq), "\r");
-    abAppend(&ab, seq, strlen(seq));
+    abAppendLit(&ab, "\r");
+
     /* Write the prompt and the current buffer content */
     abAppend(&ab, l->prompt, strlen(l->prompt));
     abAppend(&ab, buf, len);
+
     if (showHints) {
         /* Show hits if any. */
         refreshShowHints(&ab, l, plen);
     }
+
     /* Erase to right */
-    snprintf(seq, sizeof(seq), "\x1b[0K");
-    abAppend(&ab, seq, strlen(seq));
+    abAppendLit(&ab, "\x1b[0K");
+
     /* Move cursor to original position. */
+    char seq[20];
     snprintf(seq, sizeof(seq), "\r\x1b[%dC", (int)(pos + plen));
     abAppend(&ab, seq, strlen(seq));
 
@@ -575,7 +579,7 @@ static void refreshSingleLine(struct linenoiseState *l, bool showHints)
  * cursor position, and number of columns of the terminal. */
 static void refreshMultiLine(struct linenoiseState *l, bool showHints)
 {
-    char seq[64];
+    char seq[20];
     size_t plen = strlen(l->prompt);
     size_t rows = (plen + l->len + l->cols - 1) / l->cols; /* rows used by current buf. */
     size_t rpos = (plen + l->oldpos + l->cols) / l->cols; /* cursor relative row. */
@@ -583,13 +587,15 @@ static void refreshMultiLine(struct linenoiseState *l, bool showHints)
     size_t col; /* colum position, zero-based. */
     size_t old_rows = l->maxrows;
     size_t j;
-    struct abuf ab;
 
     /* Update maxrows if needed. */
-    if (rows > l->maxrows) l->maxrows = rows;
+    if (rows > l->maxrows) {
+        l->maxrows = rows;
+    }
 
     /* First step: clear all the lines used before. To do so start by
      * going to the last row. */
+    struct abuf ab;
     abInit(&ab);
     if (old_rows - rpos > 0) {
         lndebug("go down %zd", old_rows - rpos);
@@ -600,14 +606,12 @@ static void refreshMultiLine(struct linenoiseState *l, bool showHints)
     /* Now for every row clear it, go up. */
     for (j = 0; j < old_rows - 1; j++) {
         lndebug("clear+up");
-        snprintf(seq, sizeof(seq), "\r\x1b[0K\x1b[1A");
-        abAppend(&ab, seq, strlen(seq));
+        abAppendLit(&ab, "\r\x1b[0K\x1b[1A");
     }
 
     /* Clean the top line. */
     lndebug("clear");
-    snprintf(seq, sizeof(seq), "\r\x1b[0K");
-    abAppend(&ab, seq, strlen(seq));
+    abAppendLit(&ab, "\r\x1b[0K");
 
     /* Write the prompt and the current buffer content */
     abAppend(&ab, l->prompt, strlen(l->prompt));
@@ -624,9 +628,8 @@ static void refreshMultiLine(struct linenoiseState *l, bool showHints)
             l->pos == l->len &&
             (l->pos + plen) % l->cols == 0) {
         lndebug("<newline>");
-        abAppend(&ab, "\n", 1);
-        snprintf(seq, sizeof(seq), "\r");
-        abAppend(&ab, seq, strlen(seq));
+        abAppendLit(&ab, "\n\r"); // <-- This is intentional: new line and move to start in that order
+
         rows++;
         if (rows > l->maxrows) l->maxrows = rows;
     }
