@@ -123,6 +123,8 @@
 #include "util/timeout.h"
 #include "macros.h"
 
+#define PROMPT_HDR "\x1b[1;37;49m"
+#define PROMPT_TLR "\x1b[0m"
 extern mux_uart_index_t stdio_uart;
 
 // Dummy functions provided for completion and hints, can be overridden by user code.
@@ -852,7 +854,9 @@ static void lnInitState(struct linenoiseState *l, char *buf, size_t buflen, cons
     * initially is just an empty string. */
     linenoiseHistoryAdd("");
 
+    console_write_string(PROMPT_HDR);
     console_write_string(prompt);
+    console_write_string(PROMPT_TLR);
 
     l->mode = ln_read_regular;
 }
