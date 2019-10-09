@@ -280,7 +280,7 @@ static ssize_t getCursorPosition(struct linenoiseState *ls)
         ls->cur_pos_idx = 0;
         /* Query cursor location */
         console_write_string("\x1b[6n");
-        timeout_set(&ls->cur_pos_timeout, 100);
+        timeout_set(&ls->cur_pos_timeout, 500);
         return -1;
     }
 
