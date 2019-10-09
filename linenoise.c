@@ -1148,6 +1148,10 @@ int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
 
 void linenoiseRefreshEditor()
 {
+    if (!smartTerminalConnected()) {
+        return;
+    }
+
     switch (l_state.mode) {
     case ln_init:
     case ln_getColumns:
@@ -1164,6 +1168,13 @@ void linenoiseRefreshEditor()
         refreshLine(&l_state);
         break;
     }
+}
+
+void linenoiseUpdatePrompt(const char *prompt)
+{
+    l_state.prompt = prompt;
+    l_state.plen = strlen(prompt);
+    linenoiseRefreshEditor();
 }
 
 bool smartTerminalConnected()
