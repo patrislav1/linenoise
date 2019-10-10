@@ -854,9 +854,13 @@ static void lnInitState(struct linenoiseState *l, char *buf, size_t buflen, cons
     * initially is just an empty string. */
     linenoiseHistoryAdd("");
 
-    console_write_string(PROMPT_HDR);
-    console_write_string(prompt);
-    console_write_string(PROMPT_TLR);
+    if (l->smart_term_connected) {
+        console_write_string(PROMPT_HDR);
+        console_write_string(prompt);
+        console_write_string(PROMPT_TLR);
+    } else {
+        console_write_string(prompt);
+    }
 
     l->mode = ln_read_regular;
 }
