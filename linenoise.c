@@ -112,16 +112,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-//#include <termios.h>
-#include <unistd.h>
 
-#include <sys/stat.h>
-//#include <sys/ioctl.h>
 #include <sys/types.h>
 
-#include "periph/mux_uart.h"
-#include "util/timeout.h"
 #include "macros.h"
+
+#include "periph/mux_uart.h"
+
+#include "util/timeout.h"
 
 #define PROMPT_HDR "\x1b[1;37;49m"
 #define PROMPT_TLR "\x1b[0m"
