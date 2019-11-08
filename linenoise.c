@@ -289,6 +289,10 @@ static ssize_t getCursorPosition(struct linenoiseState *ls)
         return timeout_elapsed(&ls->cur_pos_timeout) ? -2 : -1;
     }
 
+    if (ls->cur_pos_idx == 0 && c != '\x1b') {
+        // discard characters, until an escape character is received
+        return -1;
+    }
     // Store until 'R' or buffer full
     ls->cur_pos_buf[ls->cur_pos_idx++] = (char)c;
     if (c != 'R' && ls->cur_pos_idx < (ssize_t)sizeof(ls->cur_pos_buf) - 1) {
