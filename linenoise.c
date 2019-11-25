@@ -616,8 +616,8 @@ static void refreshMultiLine(struct linenoiseState *l, bool showHints)
     struct abuf ab;
     abInit(&ab);
     if (old_rows - rpos > 0) {
-        lndebug("go down %zd", old_rows - rpos);
-        snprintf(seq, sizeof(seq), "\x1b[%zdB", old_rows - rpos);
+        lndebug("go down %zu", old_rows - rpos);
+        snprintf(seq, sizeof(seq), "\x1b[%zuB", old_rows - rpos);
         abAppend(&ab, seq);
     }
 
@@ -663,16 +663,16 @@ static void refreshMultiLine(struct linenoiseState *l, bool showHints)
 
     /* Go up till we reach the expected positon. */
     if (rows - rpos2 > 0) {
-        lndebug("go-up %zd", rows - rpos2);
-        snprintf(seq, sizeof(seq), "\x1b[%zdA", rows - rpos2);
+        lndebug("go-up %zu", rows - rpos2);
+        snprintf(seq, sizeof(seq), "\x1b[%zuA", rows - rpos2);
         abAppend(&ab, seq);
     }
 
     /* Set column. */
     col = (plen + l->pos) % l->cols;
-    lndebug("set col %zd", 1 + col);
+    lndebug("set col %zu", 1 + col);
     if (col) {
-        snprintf(seq, sizeof(seq), "\r\x1b[%zdC", col);
+        snprintf(seq, sizeof(seq), "\r\x1b[%zuC", col);
     } else {
         snprintf(seq, sizeof(seq), "\r");
     }
