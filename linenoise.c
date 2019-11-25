@@ -226,11 +226,13 @@ static void refreshLine(struct linenoiseState *l);
 FILE *lndebug_fp = NULL;
 #define lndebug(...) \
     do { \
-        if (lndebug_fp == NULL) { \
-            lndebug_fp = fopen("/tmp/lndebug.txt","a"); \
-            fprintf(lndebug_fp, \
-            "[%zu %zu %zu] p: %zu, rows: %zu, rpos: %zu, max: %zu, oldmax: %zu\n", \
-            l->len,l->pos,l->oldpos,plen,rows,rpos,l->maxrows,old_rows); \
+        if (!lndebug_fp) { \
+            lndebug_fp = fopen("lndebug.txt","a"); \
+            if (lndebug_fp) { \
+                fprintf(lndebug_fp, \
+                    "[%zu %zu %zu] p: %zu, rows: %zu, rpos: %zu, max: %zu, oldmax: %zu\n", \
+                    l->len,l->pos,l->oldpos,plen,rows,rpos,l->maxrows,old_rows); \
+            } \
         } \
         fprintf(lndebug_fp, ", " __VA_ARGS__); \
         fflush(lndebug_fp); \
@@ -1317,15 +1319,12 @@ int linenoiseHistorySetMaxLen(size_t len)
  * otherwise -1 is returned. */
 int linenoiseHistorySave(const char *filename)
 {
-    FILE *fp;
-    size_t j;
-
-    fp = fopen(filename, "w");
-    if (fp == NULL) {
+    FILE *fp = fopen(filename, "w");
+    if (!fp) {
         return -1;
     }
 
-    for (j = 0; j < history_len; j++) {
+    for (size_t j = 0; j < history_len; j++) {
         fprintf(fp, "%s\n", history[j]);
     }
 
@@ -1341,11 +1340,11 @@ int linenoiseHistorySave(const char *filename)
 int linenoiseHistoryLoad(const char *filename)
 {
     FILE *fp = fopen(filename, "r");
-    char buf[LINENOISE_MAX_LINE];
-
-    if (fp == NULL) {
+    if (!fp) {
         return -1;
     }
+
+    char buf[LINENOISE_MAX_LINE];
 
     while (fgets(buf, LINENOISE_MAX_LINE, fp) != NULL) {
         char *p;
