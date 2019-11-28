@@ -521,7 +521,47 @@ static void refreshShowHints(struct abuf *ab, struct linenoiseState *l, size_t p
             abAppend(ab, " \033[0;35;49m");
             if (*hints[0] != '\0') {
                 size_t abLen = MIN(strlen(hints[0]), (size_t)cols_avail);
-                abAppendN(ab, hints[0], abLen);
+                if(strchr(l->buf, ' ')) {
+                    // We got spaces, so try to locate which argument we are at
+                    size_t arg_id = 0;
+                    for(size_t pos = 0; pos < strlen(l->buf); pos++) {
+                        if(' ' == l->buf[pos]) {
+                            arg_id++;
+                        }
+                    }
+
+                    size_t arg_start = 0;
+                    const char* hint_ptr = hints[0];
+                    while(arg_id--) {
+                        while(*hint_ptr && '[' != *hint_ptr) {
+                            hint_ptr++;
+                        }
+                        if(*hint_ptr) {
+                            hint_ptr++;
+                        }
+                        arg_start = (size_t)(hint_ptr - hints[0]);
+                    }
+
+                    size_t arg_end = 0;
+                    if(arg_start) {
+                        while(*hint_ptr && ' ' != *hint_ptr && ']' != *hint_ptr) {
+                            hint_ptr++;
+                        }
+                        arg_end = (size_t)(hint_ptr - hints[0]);
+                    }
+
+                    if(arg_start != arg_end) {
+                        abAppendN(ab, hints[0], MIN(abLen, arg_start));
+                        abAppend(ab, "\033[7;35;49m");
+                        abAppendN(ab, hints[0]+arg_start, abLen < arg_start ? 0 : (abLen < arg_end ? abLen - arg_start : arg_end - arg_start));
+                        abAppend(ab, "\033[0;35;49m");
+                        abAppendN(ab, hints[0]+arg_end, abLen < arg_end ? 0 : abLen - arg_end);
+                    } else {
+                        abAppendN(ab, hints[0], abLen);
+                    }
+                } else {
+                    abAppendN(ab, hints[0], abLen);
+                }
                 cols_avail -= (ssize_t)abLen;
                 if (cols_avail > 0) {
                     abAppend(ab, " ");
