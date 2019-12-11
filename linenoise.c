@@ -553,9 +553,9 @@ static void refreshShowHints(struct abuf *ab, struct linenoiseState *l, size_t p
                     if(arg_start != arg_end) {
                         abAppendN(ab, hints[0], MIN(abLen, arg_start));
                         abAppend(ab, "\033[7;35;49m");
-                        abAppendN(ab, hints[0]+arg_start, abLen < arg_start ? 0 : (abLen < arg_end ? abLen - arg_start : arg_end - arg_start));
+                        abAppendN(ab, hints[0] + arg_start, abLen < arg_start ? 0 : (abLen < arg_end ? abLen - arg_start : arg_end - arg_start));
                         abAppend(ab, "\033[0;35;49m");
-                        abAppendN(ab, hints[0]+arg_end, abLen < arg_end ? 0 : abLen - arg_end);
+                        abAppendN(ab, hints[0] + arg_end, abLen < arg_end ? 0 : abLen - arg_end);
                     } else {
                         abAppendN(ab, hints[0], abLen);
                     }
