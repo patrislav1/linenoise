@@ -123,7 +123,6 @@
 
 #define PROMPT_HDR "\x1b[1;37;49m"
 #define PROMPT_TLR "\x1b[0m"
-extern mux_uart_index_t stdio_uart;
 
 // Dummy functions provided for completion and hints, can be overridden by user code.
 void linenoise_completion(const char *buf, linenoiseCompletions *lc) __attribute__((weak));
