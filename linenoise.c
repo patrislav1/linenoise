@@ -241,26 +241,26 @@ static int getCursorPosition(int ifd, int ofd) {
 /* Try to get the number of columns in the current terminal, or assume 80
  * if it fails. */
 static int getColumns(int ifd, int ofd) {
-        int start, cols;
+    int start, cols;
 
-        /* Get the initial position so we can restore it later. */
-        start = getCursorPosition(ifd,ofd);
-        if (start == -1) goto failed;
+    /* Get the initial position so we can restore it later. */
+    start = getCursorPosition(ifd,ofd);
+    if (start == -1) goto failed;
 
-        /* Go to right margin and get position. */
-        if (write(ofd,"\x1b[999C",6) != 6) goto failed;
-        cols = getCursorPosition(ifd,ofd);
-        if (cols == -1) goto failed;
+    /* Go to right margin and get position. */
+    if (write(ofd,"\x1b[999C",6) != 6) goto failed;
+    cols = getCursorPosition(ifd,ofd);
+    if (cols == -1) goto failed;
 
-        /* Restore position. */
-        if (cols > start) {
-            char seq[32];
-            snprintf(seq,32,"\x1b[%dD",cols-start);
-            if (write(ofd,seq,strlen(seq)) == -1) {
-                /* Can't recover... */
-            }
+    /* Restore position. */
+    if (cols > start) {
+        char seq[32];
+        snprintf(seq,32,"\x1b[%dD",cols-start);
+        if (write(ofd,seq,strlen(seq)) == -1) {
+            /* Can't recover... */
         }
-        return cols;
+    }
+    return cols;
 
 failed:
     return 80;
