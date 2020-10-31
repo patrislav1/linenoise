@@ -1,4 +1,12 @@
-# Linenoise
+# linenoise-baremetal
+
+This is a port of [linenoise](https://github.com/antirez/linenoise) to bare-metal microcontroller systems. It has been stripped of any Linux dependencies, but still assumes a POSIX-ish environment (which is usually present in bare metal applications built with arm-gcc and newlib).
+
+The most fundamental differences to `linenoise` are:
+* Entirely non-blocking (to enable cooperative multitasking on bare-metal applications without a RTOS).
+* Auto-detection of 'dumb' terminals without VT100 support, that are sometimes used in labs (avoids flooding dumb terminals with escape sequences).
+
+## Original description
 
 A minimal, zero-config, BSD licensed, readline replacement used in Redis,
 MongoDB, and Android.
