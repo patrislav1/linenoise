@@ -36,8 +36,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __LINENOISE_H
-#define __LINENOISE_H
+#pragma once
+
+#include <stdbool.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,26 +50,24 @@ typedef struct linenoiseCompletions {
   char **cvec;
 } linenoiseCompletions;
 
-typedef void(linenoiseCompletionCallback)(const char *, linenoiseCompletions *);
-typedef char*(linenoiseHintsCallback)(const char *, int *color, int *bold);
-typedef void(linenoiseFreeHintsCallback)(void *);
-void linenoiseSetCompletionCallback(linenoiseCompletionCallback *);
-void linenoiseSetHintsCallback(linenoiseHintsCallback *);
-void linenoiseSetFreeHintsCallback(linenoiseFreeHintsCallback *);
+void linenoise_completion(const char *buf, linenoiseCompletions *lc);
+const char **linenoise_hints(const char *buf);
+
 void linenoiseAddCompletion(linenoiseCompletions *, const char *);
 
-char *linenoise(const char *prompt);
-void linenoiseFree(void *ptr);
+int linenoiseEdit(char *buf, size_t buflen, const char *prompt);
+
 int linenoiseHistoryAdd(const char *line);
-int linenoiseHistorySetMaxLen(int len);
+int linenoiseHistorySetMaxLen(size_t len);
 int linenoiseHistorySave(const char *filename);
 int linenoiseHistoryLoad(const char *filename);
 void linenoiseClearScreen(void);
-void linenoiseSetMultiLine(int ml);
+void linenoiseSetMultiLine(bool ml);
 void linenoisePrintKeyCodes(void);
+void linenoiseRefreshEditor(void);
+void linenoiseUpdatePrompt(const char *prompt);
+bool smartTerminalConnected(void);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __LINENOISE_H */
