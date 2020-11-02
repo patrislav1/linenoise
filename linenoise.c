@@ -249,7 +249,7 @@ FILE *lndebug_fp = NULL;
 static inline void linenoise_write_string(const char *str)
 {
     linenoise_write(str, strlen(str));
-    }
+}
 
 /* Set if to use or not the multi line mode. */
 void linenoiseSetMultiLine(bool ml)
@@ -509,7 +509,7 @@ static void refreshShowHints(struct abuf *ab, struct linenoiseState *l, size_t p
             // hints[0] = cmd args [optional]
             // hints[1] = cmd desc
             abAppend(ab, " \033[0;35;49m");
-            if (*hints[0] != '\0') {
+            if (hints[0] && *hints[0] != '\0') {
                 size_t abLen = MIN(strlen(hints[0]), (size_t)cols_avail);
                 if(strchr(l->buf, ' ')) {
                     // We got spaces, so try to locate which argument we are at
@@ -558,7 +558,7 @@ static void refreshShowHints(struct abuf *ab, struct linenoiseState *l, size_t p
                     cols_avail--;
                 }
             }
-            if (cols_avail > 0) {
+            if (cols_avail > 0 && hints[1] && *hints[1] != '\0') {
                 abAppend(ab, "\033[1;35;49m");
                 size_t abLen = MIN(strlen(hints[1]), (size_t)cols_avail);
                 abAppendN(ab, hints[1], abLen);
