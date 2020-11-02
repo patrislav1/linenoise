@@ -224,7 +224,6 @@ enum KEY_ACTION {
     BACKSPACE =  127    /* Backspace */
 };
 
-int linenoiseHistoryAdd(const char *line);
 static void refreshLine(struct linenoiseState *l);
 
 /* Debugging macro. */
