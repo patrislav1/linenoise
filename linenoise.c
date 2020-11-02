@@ -235,7 +235,7 @@ FILE *lndebug_fp = NULL;
             lndebug_fp = fopen("lndebug.txt","a"); \
             if (lndebug_fp) { \
                 fprintf(lndebug_fp, \
-                    "[%zu %zu %zu] p: %zu, rows: %zu, rpos: %zu, max: %zu, oldmax: %zu\n", \
+                    "[%u %u %u] p: %u, rows: %u, rpos: %u, max: %u, oldmax: %u\n", \
                     l->len,l->pos,l->oldpos,plen,rows,rpos,l->maxrows,old_rows); \
             } \
         } \
@@ -293,8 +293,8 @@ static ssize_t getCursorPosition(struct linenoiseState *ls)
 
     ls->cur_pos_buf[ls->cur_pos_idx] = '\0';
 
-    ssize_t rows, cols;
-    if (sscanf(ls->cur_pos_buf, "\x1b[%zd;%zd", &rows, &cols) != 2) {
+    int rows, cols;
+    if (sscanf(ls->cur_pos_buf, "\x1b[%d;%d", &rows, &cols) != 2) {
         return -2;
     }
     return (ssize_t)cols;
@@ -344,6 +344,7 @@ static int getColumns(struct linenoiseState *ls)
         /* Restore position. */
         if ((ssize_t)ls->cols > ls->cur_pos_initial) {
             char seq[16];
+            snprintf(seq, sizeof(seq), "\x1b[%uD", ls->cols - (size_t)ls->cur_pos_initial);
             linenoise_write_string(seq);
         }
         break;
@@ -645,8 +646,8 @@ static void refreshMultiLine(struct linenoiseState *l, bool showHints)
     struct abuf ab;
     abInit(&ab);
     if (old_rows - rpos > 0) {
-        lndebug("go down %zu", old_rows - rpos);
-        snprintf(seq, sizeof(seq), "\x1b[%zuB", old_rows - rpos);
+        lndebug("go down %u", old_rows - rpos);
+        snprintf(seq, sizeof(seq), "\x1b[%uB", old_rows - rpos);
         abAppend(&ab, seq);
     }
 
@@ -688,20 +689,20 @@ static void refreshMultiLine(struct linenoiseState *l, bool showHints)
 
     /* Move cursor to right position. */
     rpos2 = (plen + l->pos + l->cols) / l->cols; /* current cursor relative row. */
-    lndebug("rpos2 %zd", rpos2);
+    lndebug("rpos2 %d", rpos2);
 
     /* Go up till we reach the expected positon. */
     if (rows - rpos2 > 0) {
-        lndebug("go-up %zu", rows - rpos2);
-        snprintf(seq, sizeof(seq), "\x1b[%zuA", rows - rpos2);
+        lndebug("go-up %u", rows - rpos2);
+        snprintf(seq, sizeof(seq), "\x1b[%uA", rows - rpos2);
         abAppend(&ab, seq);
     }
 
     /* Set column. */
     col = (plen + l->pos) % l->cols;
-    lndebug("set col %zu", 1 + col);
+    lndebug("set col %u", 1 + col);
     if (col) {
-        snprintf(seq, sizeof(seq), "\r\x1b[%zuC", col);
+        snprintf(seq, sizeof(seq), "\r\x1b[%uC", col);
     } else {
         snprintf(seq, sizeof(seq), "\r");
     }
