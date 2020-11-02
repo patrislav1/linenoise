@@ -45,9 +45,20 @@
 extern "C" {
 #endif
 
+// User-provided console getch() function
+// Should not block and return -1, when no character is received
+int linenoise_getch(void);
+
+// User-provided console write() function
+void linenoise_write(const char *buf, size_t n);
+
+// User-provided timeout functions (optional)
+void linenoise_timeout_set(void);
+bool linenoise_timeout_elapsed(void);
+
 typedef struct linenoiseCompletions {
-  size_t len;
-  char **cvec;
+    size_t len;
+    char **cvec;
 } linenoiseCompletions;
 
 void linenoise_completion(const char *buf, linenoiseCompletions *lc);

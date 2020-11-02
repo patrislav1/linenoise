@@ -115,26 +115,34 @@
 
 #include <sys/types.h>
 
-#include "macros.h"
-
-#include "periph/mux_uart.h"
-
-#include "util/timeout.h"
-
 #define PROMPT_HDR "\x1b[1;37;49m"
 #define PROMPT_TLR "\x1b[0m"
 
-// Dummy functions provided for completion and hints, can be overridden by user code.
-void linenoise_completion(const char *buf, linenoiseCompletions *lc) __attribute__((weak));
-const char **linenoise_hints(const char *buf) __attribute__((weak));
+#define ATTR_WEAK __attribute__((weak))
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
-void linenoise_completion(const char *buf, linenoiseCompletions *lc)
+// Dummy timeout functions for query of screen dimensions (to detect a dumb terminal)
+// Can be overridden by user code.
+
+void ATTR_WEAK linenoise_timeout_set(void)
+{
+}
+
+bool ATTR_WEAK linenoise_timeout_elapsed(void)
+{
+    // Default timeout implementation never elapses.
+    return false;
+}
+
+// Dummy functions provided for completion and hints, can be overridden by user code.
+
+void ATTR_WEAK linenoise_completion(const char *buf, linenoiseCompletions *lc)
 {
     (void)buf;
     (void)lc;
 }
 
-const char **linenoise_hints(const char *buf)
+const char** ATTR_WEAK linenoise_hints(const char *buf)
 {
     (void)buf;
     return NULL;
@@ -175,7 +183,6 @@ struct linenoiseState {
     char cur_pos_buf[32];
     ssize_t cur_pos_idx;
     ssize_t cur_pos_initial;
-    timeout_t cur_pos_timeout;
 
     bool smart_term_connected;
 
@@ -240,25 +247,10 @@ FILE *lndebug_fp = NULL;
 #define lndebug(...)
 #endif
 
-/* ======================= Low level terminal handling ====================== */
-
-static int console_getch()
+static inline void linenoise_write_string(const char *str)
 {
-    if (!uart_has_input(stdio_uart)) {
-        return -1;
+    linenoise_write(str, strlen(str));
     }
-    return uart_getch(stdio_uart);
-}
-
-static inline void console_write(const char *buf, size_t n)
-{
-    uart_write_bytes(stdio_uart, buf, n);
-}
-
-static inline void console_write_string(const char *str)
-{
-    uart_write_string(stdio_uart, str);
-}
 
 /* Set if to use or not the multi line mode. */
 void linenoiseSetMultiLine(bool ml)
@@ -278,16 +270,16 @@ static ssize_t getCursorPosition(struct linenoiseState *ls)
     if (ls->cur_pos_idx < 0) {
         ls->cur_pos_idx = 0;
         /* Query cursor location */
-        console_write_string("\x1b[6n");
-        timeout_set(&ls->cur_pos_timeout, 500);
+        linenoise_write_string("\x1b[6n");
+        linenoise_timeout_set();
         return -1;
     }
 
     // Read one character
-    int c = console_getch();
+    int c = linenoise_getch();
     if (c < 0) {
         // Return error, if timeout elapsed.
-        return timeout_elapsed(&ls->cur_pos_timeout) ? -2 : -1;
+        return linenoise_timeout_elapsed() ? -2 : -1;
     }
 
     if (ls->cur_pos_idx == 0 && c != '\x1b') {
@@ -337,7 +329,7 @@ static int getColumns(struct linenoiseState *ls)
         ls->cur_pos_initial = result;
 
         /* Go to right margin and get position. */
-        console_write_string("\x1b[999C");
+        linenoise_write_string("\x1b[999C");
 
         ls->cur_pos_idx = -1;
         ls->mode = ln_getColumns_2;
@@ -353,8 +345,7 @@ static int getColumns(struct linenoiseState *ls)
         /* Restore position. */
         if ((ssize_t)ls->cols > ls->cur_pos_initial) {
             char seq[16];
-            snprintf(seq, sizeof(seq), "\x1b[%zuD", ls->cols - (size_t)ls->cur_pos_initial);
-            console_write_string(seq);
+            linenoise_write_string(seq);
         }
         break;
     }
@@ -371,7 +362,7 @@ failed:
 /* Clear the screen. Used to handle ctrl+l */
 void linenoiseClearScreen(void)
 {
-    console_write_string("\x1b[H\x1b[2J");
+    linenoise_write_string("\x1b[H\x1b[2J");
     l_state.mode = ln_getColumns;
 }
 
@@ -625,7 +616,7 @@ static void refreshSingleLine(struct linenoiseState *l, bool showHints)
     snprintf(seq, sizeof(seq), "\r\x1b[%dC", (int)(pos + plen));
     abAppend(&ab, seq);
 
-    console_write(ab.b, ab.len);
+    linenoise_write(ab.b, ab.len);
 
     abFree(&ab);
 }
@@ -720,7 +711,7 @@ static void refreshMultiLine(struct linenoiseState *l, bool showHints)
     lndebug("\n");
     l->oldpos = l->pos;
 
-    console_write(ab.b, ab.len);
+    linenoise_write(ab.b, ab.len);
     abFree(&ab);
 }
 
@@ -898,11 +889,11 @@ static void lnInitState(struct linenoiseState *l, char *buf, size_t buflen, cons
     linenoiseHistoryAdd("");
 
     if (l->smart_term_connected) {
-        console_write_string(PROMPT_HDR);
-        console_write_string(prompt);
-        console_write_string(PROMPT_TLR);
+        linenoise_write_string(PROMPT_HDR);
+        linenoise_write_string(prompt);
+        linenoise_write_string(PROMPT_TLR);
     } else {
-        console_write_string(prompt);
+        linenoise_write_string(prompt);
     }
 
     l->mode = ln_read_regular;
@@ -911,7 +902,7 @@ static void lnInitState(struct linenoiseState *l, char *buf, size_t buflen, cons
 static int lnReadEscSequence(struct linenoiseState *l)
 {
     /* Read at least two bytes representing the escape sequence */
-    int c = console_getch();
+    int c = linenoise_getch();
     if (c < 0) {
         return -1;
     }
@@ -1114,7 +1105,7 @@ static int lnHandleCharacterDumb(struct linenoiseState *l, char c)
 
 static int lnCompletion(struct linenoiseState *ls)
 {
-    int c = console_getch();
+    int c = linenoise_getch();
     if (c < 0) {
         return -1;
     }
@@ -1148,7 +1139,7 @@ static int lnCompletion(struct linenoiseState *ls)
 
 static int lnReadUserInput(struct linenoiseState *l)
 {
-    int c = console_getch();
+    int c = linenoise_getch();
 
     if (c < 0) {
         return -1;
@@ -1244,7 +1235,7 @@ void linenoisePrintKeyCodes(void)
         int c;
 
         do {
-            c = console_getch();
+            c = linenoise_getch();
         } while (c < 0);
 
         memmove(quit, quit + 1, sizeof(quit) - 1); /* shift string to left. */
