@@ -394,19 +394,23 @@ static void freeCompletions(linenoiseCompletions *lc)
 
 static void lnShowCompletion(struct linenoiseState *ls)
 {
-    /* Show completion or original buffer */
+    struct linenoiseState saved = *ls;
+    /* Find next completion not identical with current line buffer */
+    while (ls->completion_idx < ls->lc.len) {
+        if (strcmp(ls->buf, ls->lc.cvec[ls->completion_idx])) {
+            break;
+        }
+        ls->completion_idx = (ls->completion_idx + 1) % (ls->lc.len + 1);
+    }
     if (ls->completion_idx < ls->lc.len) {
-        struct linenoiseState saved = *ls;
-
         ls->len = ls->pos = strlen(ls->lc.cvec[ls->completion_idx]);
         ls->buf = ls->lc.cvec[ls->completion_idx];
-        refreshLine(ls);
-        ls->len = saved.len;
-        ls->pos = saved.pos;
-        ls->buf = saved.buf;
-    } else {
-        refreshLine(ls);
     }
+    /* Show completion or original buffer */
+    refreshLine(ls);
+    ls->len = saved.len;
+    ls->pos = saved.pos;
+    ls->buf = saved.buf;
 }
 
 /* This is an helper function for linenoiseEdit() and is called when the
