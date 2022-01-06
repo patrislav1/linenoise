@@ -1026,7 +1026,7 @@ static int lnHandleCharacter(struct linenoiseState *l, char c)
         } else {
             history_len--;
             free(history[history_len]);
-            return -1;
+            return -2;
         }
         break;
     case CTRL_T:    /* ctrl-t, swaps current character with previous. */
