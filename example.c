@@ -27,8 +27,8 @@ void linenoise_completion(const char *buf, linenoiseCompletions *lc) {
  */
 
 const char *world[] = { "World", "- Displays a traditional greeting"};
-const char *quit[] = { "/Quit", "- Exits this example"};
-const char *count[] = { "/Count", "- Prints the background counter"};
+const char *quit[] = { "/quit", "- Exits this example"};
+const char *count[] = { "/count", "- Prints the background counter"};
 
 const char **linenoise_hints(const char *buf) {
     if (!strcasecmp(buf,"hello")) {
@@ -108,29 +108,32 @@ int main(int argc, char **argv) {
      int ret = 0;
      int something_else = 0;
      do {
-        ret = linenoiseEdit(line, sizeof(line),"hello> ");
-        /* ret is the number of characters returned,
-         * -1 that the line was incomplete, -2 for Ctrl-D was pressed.
-         * Do something with the returned string if valid. */
-        if (ret > 0) {
-            if (line[0] != '\0' && line[0] != '/') {
-                printf("\r\necho: '%s'\r\n", line);
-                linenoiseHistoryAdd(line); /* Add to the history. */
-                linenoiseHistorySave("history.txt"); /* Save the history on disk. */
-            } else if (!strncmp(line,"/historylen",11)) {
-                /* The "/historylen" command will change the history len. */
-                int len = atoi(line+11);
-                linenoiseHistorySetMaxLen(len);
-            } else if (!strncmp(line,"/count",6)) {
-                /* Print the counter that's our background work to do */
-                printf("\r\nCounter: %d\r\n", something_else);
-            } else if (!strncmp(line,"/quit",5)) {
-                printf("\r\nQuit command received. Exiting now.\r\n");
-                ret = -2;
-            } else if (line[0] == '/') {
-                printf("\r\nUnreconized command: %s\r\n", line);
-            }
+        ret = linenoiseEdit(line, sizeof(line), "hello> ");
+        /* ret is the number of characters returned */
+        if (ret <= 0) {
+            /* Nothing to do:
+             *  0: empty command entered
+             * -1: no command to return (still collecting characters)
+             * -2: Ctrl-D was pressed so we'll quit (below)
+             */
+        } else if (line[0] != '\0' && line[0] != '/') {
+            printf("\r\necho: '%s'\r\n", line);
+            linenoiseHistoryAdd(line); /* Add to the history. */
+            linenoiseHistorySave("history.txt"); /* Save the history on disk. */
+        } else if (!strncmp(line,"/historylen",11)) {
+            /* The "/historylen" command will change the history len. */
+            int len = atoi(line+11);
+            linenoiseHistorySetMaxLen(len);
+        } else if (!strncmp(line,"/count",6)) {
+            /* Print the counter that's our background work to do */
+            printf("\r\nCounter: %d\r\n", something_else);
+        } else if (!strncmp(line,"/quit",5)) {
+            printf("\r\nQuit command received. Exiting now.\r\n");
+            ret = -2;
+        } else if (line[0] == '/') {
+            printf("\r\nUnreconized command: %s\r\n", line);
         }
+    }
         /* Do some other work in the meantime, to show that linenoiseEdit doesn't block
          * (although your implementation of linenoise_getch() might, as above)
          */
