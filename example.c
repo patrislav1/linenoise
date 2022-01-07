@@ -133,7 +133,6 @@ int main(int argc, char **argv) {
         } else if (line[0] == '/') {
             printf("\r\nUnreconized command: %s\r\n", line);
         }
-    }
         /* Do some other work in the meantime, to show that linenoiseEdit doesn't block
          * (although your implementation of linenoise_getch() might, as above)
          */
