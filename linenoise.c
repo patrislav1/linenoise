@@ -305,6 +305,12 @@ static ssize_t getCursorPosition(struct linenoiseState *ls)
 static int getColumns(struct linenoiseState *ls)
 {
     ssize_t result;
+
+    // atm26 XXX: disable for now:
+    // detection doesn't work and enablement
+    // causes capability exception
+    goto failed;
+
     switch (ls->mode) {
     case ln_init:
     case ln_read_regular:
